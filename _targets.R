@@ -16,24 +16,24 @@ source('src/utils.R')
 
 ## PARAMETERS
 path_to_data <- '/nas/cee-water/cjgleason/craig/CONUS_ephemeral_data'
-gageRecordStart <- '2013-01-01'
+gageRecordStart <- '1983-01-01'
 gageRecordEnd <- '2023-12-31'
-mcSamples <- 1
-minEventDuration <- 0 #[hr] minimum flood event length.
+#mcSamples <- 1
+#minEventDuration <- 0 #[hr] minimum flood event length.
 minRecordLength <- 10 #[yrs] minimum number of years on record for a gage to be included
 
 minADCPMeas <- 20 #min depth stage adcp measurements used to convert bankfull stage to bankfull depth
 
 #distributed computing across cpu-node
-# tar_option_set(
-#   controller = crew_controller_local(workers = 23)
-# )
+tar_option_set(
+  controller = crew_controller_local(workers = 18)
+)
 
 ## MAP PIPELINE OVER STATIC BRANCHES OF GAGES
 gageAnalysis <- tar_map(
   values = tibble( # Setup static branching
     method_function = rlang::syms(c("getBasinGages")),
-    huc4 = c('0108')#, '0107', '0502', '1710', '0204')
+    huc4 = c('0108')
   ),
   names='huc4',
   
@@ -42,7 +42,7 @@ gageAnalysis <- tar_map(
   tar_target(gage, prepGage(path_to_data, gagesBasin),
              pattern=map(gagesBasin),
              iteration='list'),
-  tar_target(gageRecord, prepFlowRecord(gage, gageRecordStart, gageRecordEnd, minRecordLength),
+  tar_target(gageRecord, prepFlowRecord_v2(gage, gageRecordStart, gageRecordEnd, minRecordLength),
              pattern=map(gage),
              iteration='list'),
   
@@ -50,33 +50,43 @@ gageAnalysis <- tar_map(
   tar_target(basinData, buildBasinDataPackage(path_to_data, huc4)),
 
   ## BUILD BANKFULL STAGE MODEL
-  tar_target(bankfullModel, buildGageBankfullModel(gage, minADCPMeas),
-             pattern=map(gage),
-             iteration='list'),
-  tar_target(bankfull_mc, setupMonteCarlo(mcSamples, bankfullModel, 'justone'),
-             pattern=map(bankfullModel),
-             iteration='list'), #(see function for the third parameter)
+  # tar_target(bankfullModel, buildGageBankfullModel(gage, minADCPMeas),
+  #            pattern=map(gage),
+  #            iteration='list'),
+  tar_target(stageDepthModel, buildStageDepthRelationship(gage, minADCPMeas),
+            pattern=map(gage),
+            iteration='list'),
+  tar_target(depthAHG, buildDepthAHG(gage, minADCPMeas),
+            pattern=map(gage),
+            iteration='list'),
+  # tar_target(bankfull_mc, setupMonteCarlo(mcSamples, bankfullModel, 'justone'),
+  #            pattern=map(bankfullModel),
+  #            iteration='list'), #(see function for the third parameter)
   
   ## BUILD FLOOD EVENT ANALYSIS (INC. FLOODPLAIN PROFILES AND INUNDATED AREAS)
-  tar_target(floodEvents, buildEventAnalysis(path_to_data, huc4, gageRecord, gage, bankfull_mc, BHGmodel, minEventDuration),
-             pattern=map(gage, gageRecord, bankfull_mc), #branch over mc realization of bankfull stage
-             iteration='list'),
-  
-  ## BUILD FLOODWATER PROFILES FROM GAGED FLOODS (for validation)
-  # tar_target(floodwaterProfiles, buildFloodwaterProfile(path_to_data, huc4, basinData, gage, floodEvents),
-  #            pattern=map(gage, floodEvents),
+  # tar_target(floodEvents, buildEventAnalysis(path_to_data, huc4, gageRecord, gage, bankfull_mc, BHGmodel, minEventDuration),
+  #            pattern=map(gage, gageRecord, bankfull_mc), #branch over mc realization of bankfull stage
   #            iteration='list'),
   
-  ## SUMMARISE MONTE CARLO SIMULATIONS INTO MEAN AND SIGMA
-  tar_target(basinFloodRecord, buildEventAnalysis_full(floodEvents, gage)),
+  # ## BUILD FLOODWATER PROFILES FROM GAGED FLOODS (for validation)
+  # # tar_target(floodwaterProfiles, buildFloodwaterProfile(path_to_data, huc4, basinData, gage, floodEvents),
+  # #            pattern=map(gage, floodEvents),
+  # #            iteration='list'),
+  
+  # ## SUMMARISE MONTE CARLO SIMULATIONS INTO MEAN AND SIGMA
+  # tar_target(basinFloodRecord, buildEventAnalysis_full(floodEvents, gage)),
   
   ## UPSCALE TO RIVER NETWORK
-  tar_target(upscalingModel, buildUpscalingModel(huc4, basinFloodRecord, gageRecordStart, gageRecordEnd)),
-  tar_target(basinModel, buildNetworkModel(path_to_data, huc4, upscalingModel, BHGmodel, basinData)),
-  tar_target(basinAnalysis, runNetworkModel(path_to_data, huc4, basinData, basinModel)),
+  tar_target(upscalingModel, buildUpscalingModel_v2(huc4, gageRecord, gage, stageDepthModel, BHGmodel, gageRecordStart, gageRecordEnd)),
+  tar_target(upscalingModel_ahg, buildUpscalingModel_v2ahg(huc4, gageRecord, gage, depthAHG, gageRecordStart, gageRecordEnd))
+  # tar_target(basinModel, buildNetworkModel(path_to_data, huc4, upscalingModel, BHGmodel, basinData)),
+  # tar_target(basinAnalysis, runNetworkModel(path_to_data, huc4, basinData, basinModel)),
 
-  ## HORTON SCALING TO CAPTURE INUNDATION IN STREAMS < 10M WIDE
-  tar_target(hortonResults, hortonScaling(basinAnalysis))
+  # ## HORTON SCALING TO CAPTURE INUNDATION IN STREAMS < 10M WIDE
+  # tar_target(hortonResults, hortonScaling(basinAnalysis)),
+
+  # ## VALIDATE AT REACHES WITH USGS INUNDATION MODELS
+  #   tar_target(val_test, valModel(basinData, basinModel))
 )
 
 
@@ -86,9 +96,9 @@ list(
   tar_target(BHGdata, dataBHG()),
   
   ## RUN GAGE ANALYSIS (STATIC BRANCHED)
-  gageAnalysis,
+  gageAnalysis
   
   ## VALIDATION
-  tar_combine(combined_bankfullModel, gageAnalysis$bankfullModel, command = c(!!!.x)),
-  tar_target(bankfullModelValidation, validateBankfullModel(combined_bankfullModel, BHGdata))
+ # tar_combine(combined_bankfullModel, gageAnalysis$bankfullModel, command = c(!!!.x)),
+ # tar_target(bankfullModelValidation, validateBankfullModel(combined_bankfullModel, BHGdata))
 )

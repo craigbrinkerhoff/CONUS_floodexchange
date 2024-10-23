@@ -27,58 +27,130 @@ prepGage <- function(path_to_data, gageID){
 
 
 
-prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength){
+# prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength){
+#   #prep
+#   gageID <- gage$site_no
+  
+#   #grab sub-daily discharge data
+#   gagedata <- tryCatch(dataRetrieval::readNWISdata(sites = gageID,
+#                                           service='uv', #15' or 30' stage and flow
+#                                           parameterCd = c('00065', '00060'), #discharge and stage parameter codes [cfs and ft, respectively]
+#                                           startDate = gageRecordStart,
+#                                           endDate = gageRecordEnd),
+#                       error = function(m){return(data.frame())})
+  
+#   if(nrow(gagedata)==0) {return(data.frame())} #if no gage data, move on
+#   if(!("X_00065_00000" %in% colnames(gagedata))){return(data.frame())} #if incorrect stage column name (happens sometimes), move on
+#   if(!("X_00060_00000" %in% colnames(gagedata))){return(data.frame())} #if incorrect discharge column name (happens sometimes), move on
+  
+#   #hardcoded (for now at least) downscampling of sensor data to 30'
+#   #if sensor records 15' data, downsample to 30' data to match other gages
+#   if(as.numeric(gagedata$dateTime[2] - gagedata$dateTime[1]) == 15){ #15'
+#     gagedata <- gagedata[seq(1,nrow(gagedata),2),]
+#   }
+  
+#   #if sensor records 5' data, downsample to 30' data to match other gages
+#   if(as.numeric(gagedata$dateTime[2] - gagedata$dateTime[1]) == 5){ #5'
+#     gagedata <- gagedata[seq(1,nrow(gagedata),6),]
+#   }
+  
+#   #convert to metric
+#   gagedata$Q_cms <- gagedata$X_00060_00000 * 0.0283 #cfs to cms
+#   gagedata$log10_Q_cms <- log10(gagedata$Q_cms)
+#   gagedata$stage_m <- gagedata$X_00065_00000 * 0.3048 #ft to m
+  
+#   #only keep flowing events
+#   gagedata <- gagedata %>%
+#     dplyr::filter(stage_m > 0 & Q_cms > 0)
+
+#   # get flood event duration from flow timeseries (workaround to handle known date class bug with midnight- https://github.com/tidyverse/lubridate/issues/1124)
+#   gagedata$date <- lubridate::ymd_hms(format(as.POSIXct(gagedata$dateTime), format = "%Y-%m-%d %T %Z"))
+
+#   #get number of years on record
+#   start <- lubridate::year(min(gagedata$date))
+#   end <- lubridate::year(max(gagedata$date))
+#   spread <- end - start
+  
+#   if(spread < minRecordLength){return(data.frame())}
+
+#   gagedata$spread <- spread
+
+#   #get exceedance probs for each flow value
+#   probs <- quantile(gagedata$Q_cms, 1 - seq(0,1,0.00001)) #calc exdeeance probs down to 0.001%
+#   names(probs) <- NULL
+#   gagedata$exceed_prob <- sapply(gagedata$Q_cms, function(x){which.min(abs(probs - x)) / length(probs)})
+
+#   return(gagedata)
+# }
+
+
+
+
+
+prepFlowRecord_v2 <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength){
   #prep
   gageID <- gage$site_no
   
   #grab sub-daily discharge data
   gagedata <- tryCatch(dataRetrieval::readNWISdata(sites = gageID,
-                                          service='uv', #15' or 30' stage and flow
-                                          parameterCd = c('00065', '00060'), #discharge and stage parameter codes [cfs and ft, respectively]
+                                          service='uv', #15' or 30' stage and flow (depending on gage)
+                                          parameterCd = c('00060'), #discharge parameter code [cfs]
                                           startDate = gageRecordStart,
                                           endDate = gageRecordEnd),
                       error = function(m){return(data.frame())})
-  
+
   if(nrow(gagedata)==0) {return(data.frame())} #if no gage data, move on
-  if(!("X_00065_00000" %in% colnames(gagedata))){return(data.frame())} #if incorrect stage column name (happens sometimes), move on
   if(!("X_00060_00000" %in% colnames(gagedata))){return(data.frame())} #if incorrect discharge column name (happens sometimes), move on
-  
-  #hardcoded (for now at least) downscampling of sensor data to 30'
-  #if sensor records 15' data, downsample to 30' data to match other gages
-  if(as.numeric(gagedata$dateTime[2] - gagedata$dateTime[1]) == 15){ #15'
-    gagedata <- gagedata[seq(1,nrow(gagedata),2),]
-  }
-  
-  #if sensor records 5' data, downsample to 30' data to match other gages
-  if(as.numeric(gagedata$dateTime[2] - gagedata$dateTime[1]) == 5){ #5'
-    gagedata <- gagedata[seq(1,nrow(gagedata),6),]
-  }
-  
+
   #convert to metric
   gagedata$Q_cms <- gagedata$X_00060_00000 * 0.0283 #cfs to cms
-  gagedata$log10_Q_cms <- log10(gagedata$Q_cms)
-  gagedata$stage_m <- gagedata$X_00065_00000 * 0.3048 #ft to m
   
   #only keep flowing events
   gagedata <- gagedata %>%
-    dplyr::filter(stage_m > 0 & Q_cms > 0)
+    dplyr::filter(Q_cms > 0)
 
-  # get flood event duration from flow timeseries (workaround to handle known date class bug with midnight- https://github.com/tidyverse/lubridate/issues/1124)
+  # convert to date (workaround to handle known date class bug with midnight- https://github.com/tidyverse/lubridate/issues/1124)
   gagedata$date <- lubridate::ymd_hms(format(as.POSIXct(gagedata$dateTime), format = "%Y-%m-%d %T %Z"))
 
-  #get number of years on record
-  start <- lubridate::year(min(gagedata$date))
-  end <- lubridate::year(max(gagedata$date))
-  spread <- end - start
-  
-  if(spread < minRecordLength){return(data.frame())}
+  #downsample to hourly (just to be consistent and reduce volume of data)
+  gagedata <- gagedata %>%
+    dplyr::mutate(date_hr = lubridate::ymd_h(paste0(lubridate::year(date), '-', lubridate::month(date),'-',lubridate::day(date), '-', lubridate::hour(date)))) %>%
+    dplyr::group_by(date_hr) %>%
+    dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
+                    Q_cms = mean(Q_cms, na.rm=T))
 
+  #get number of years on recordf
+  start <- lubridate::year(min(gagedata$date_hr))
+  end <- lubridate::year(max(gagedata$date_hr))
+  spread <- end - start
+
+  if(spread < minRecordLength){return(data.frame())}
+  if(nrow(gagedata)== 0){return(data.frame())}
+  
   gagedata$spread <- spread
 
+
   #get exceedance probs for each flow value
-  probs <- quantile(gagedata$Q_cms, 1 - seq(0,1,0.00001)) #calc exdeeance probs down to 0.001%
-  names(probs) <- NULL
-  gagedata$exceed_prob <- sapply(gagedata$Q_cms, function(x){which.min(abs(probs - x)) / length(probs)})
+  #probs <- quantile(gagedata$Q_cms, 1 - seq(0,1,0.00001)) #calc exdeeance probs down to 0.001%
+  #names(probs) <- NULL
+  #gagedata$exceed_prob <- sapply(gagedata$Q_cms, function(x){which.min(abs(probs - x)) / length(probs)})
+  gagedata$rank <- rank(-gagedata$Q_cms) #hourly flow data
+  gagedata$exceed_freq <- (gagedata$rank/(nrow(gagedata) + 1)) #exceed prob for a given hour over 'spread' years
+  gagedata$exceed_prob <- gagedata$exceed_freq * 24*365*(1/gagedata$spread) #apply to yearly timescale, i.e. exceed prob in a given year
+
+  #grab rating table to convert to stage
+  ratingTable <- tryCatch(dataRetrieval::readNWISrating(gageID, "exsa"),
+                      error = function(m){return(data.frame())})
+  ratingTable$stage_m <- (ratingTable$INDEP  + ratingTable$SHIFT) * 0.3048 #ft to m
+  ratingTable$Q_cms <- ratingTable$DEP * 0.0283
+
+  #convert historical streamflow record to stages using rating table
+  gagedata$stage_m <- sapply(gagedata$Q_cms, function(i){ratingTable[which.min(abs(ratingTable$Q_cms - i)),]$stage_m})
+
+  if(is.list(gagedata$stage_m)){return(data.frame())} #sometimes you get an empty list, presumbaly b/c the rating table is empty
+
+  #add flag if gagedata is outside of the rating table
+  gagedata$ratingflag <- ifelse(gagedata$Q_cms > max(ratingTable$Q_cms) | gagedata$Q_cms < min(ratingTable$Q_cms), 1, 0)
 
   return(gagedata)
 }
@@ -321,21 +393,22 @@ modelInundation <- function(inundationData, floodDepth){
 
 
 
-
-
-
-buildGageBankfullModel <- function(gage, minADCPMeas){
+buildStageDepthRelationship <- function(gage, minADCPMeas){
   #prep
   gageID <- gage$site_no
-  
-  #prep rating table
-  ratingTable <- dataRetrieval::readNWISrating(gageID, "exsa")
-  ratingTable$stage_m <- ratingTable$INDEP * 0.3048# + ratingTable$SHIFT #ft to m
-  ratingTable$Q_cms <- ratingTable$DEP * 0.0283
-  ratingTable$log10_Q_cms <- log10(ratingTable$Q_cms)
-  
+
   #prep custom rating table from available adcp measurements
-  surfaceData <- dataRetrieval::readNWISmeas(gageID, expanded = TRUE) %>%
+  surfaceData <- tryCatch(dataRetrieval::readNWISmeas(gageID, expanded = TRUE),
+                    error=function(m){return(data.frame('site_no'=gageID,
+                                                      'lm_r2'=NA,
+                                                      'lm_depth_a'=NA,
+                                                      'lm_depth_b'=NA))})
+  
+  if(nrow(surfaceData)< minADCPMeas){return(data.frame('site_no'=gageID,
+                                                      'lm_r2'=NA,
+                                                      'lm_depth_a'=NA,
+                                                      'lm_depth_b'=NA))}
+  surfaceData <- surfaceData %>%
     dplyr::filter(measured_rating_diff %in% c('Good', 'Excellent')) %>%
     dplyr::mutate('stage_m'=gage_height_va * 0.3048,
                   'Q_cms'=chan_discharge* 0.0283,
@@ -344,15 +417,9 @@ buildGageBankfullModel <- function(gage, minADCPMeas){
                   'velocity_ms'=chan_velocity * 0.3048) %>%
     dplyr::select(c('site_no', 'stage_m', 'Q_cms', 'width_m', 'area_m2', 'velocity_ms')) %>%
     dplyr::mutate(depth_m=Q_cms / (width_m*velocity_ms),
-                  log10_Q_cms = log10(Q_cms))
-  
-  #only keep flowing events
-  ratingTable <- ratingTable %>%
+                  log10_Q_cms = log10(Q_cms)) %>%
     dplyr::filter(stage_m > 0 & Q_cms > 0)
-  
-  surfaceData <- surfaceData %>%
-    dplyr::filter(stage_m > 0 & Q_cms > 0)
-  
+
   #remove likely erronous outlier depth measurements
   iqr <- IQR(surfaceData$depth_m, na.rm=T)
   
@@ -360,367 +427,663 @@ buildGageBankfullModel <- function(gage, minADCPMeas){
     dplyr::filter(depth_m < (quantile(depth_m, 0.75, na.rm=T) + 1.5*iqr)) %>%
     dplyr::filter(depth_m > (quantile(depth_m, 0.25, na.rm=T) - 1.5*iqr))
   
-  if(nrow(ratingTable)==0 | nrow(surfaceData)< minADCPMeas){return(data.frame('site_no'=gageID,
-                                                                    'DA_skm'=NA,
-                                                                    'seg_r2'=NA,
-                                                                    'seg_nbreaks'=NA,
-                                                                    'depthstage_r2'=NA,
-                                                                    'bankfull_stage_mu_m'=NA,
-                                                                    'bankfull_stage_se_m'=NA,
-                                                                    'bankfull_depth_mu_m'=NA,
-                                                                    'bankfull_depth_lower'=NA,
-                                                                    'bankfull_depth_upper'=NA,
-                                                                    'bankfull_Q_mu_m'=NA,
-                                                                    'bankfull_Q_lower'=NA,
-                                                                    'bankfull_Q_upper'=NA))}
-  
-  #segmented regression
-  #linear regression for segmented
-  lm <- lm(log10_Q_cms~stage_m, data=ratingTable)
-
-  #fit breakpoint models with 0-2 breakpoints, keeping the one with the best bic
-  seg <- segmented::selgmented(lm, Kmax=2, type='bic')
-
-  bankfull_stage_mu_m <- seg$psi[nrow(seg$psi),2] #always use higher of the breakpoints
-  bankfull_stage_se_m <- seg$psi[nrow(seg$psi),3] #always use higher of the breakpoints
-  
-  #get bankfull Q
-  breakpoint_Q_mean <- (ratingTable[which(ratingTable$INDEP == round(bankfull_stage_mu_m*3.28084,2)),]$DEP)*0.0283
-  breakpoint_Q_lower <- (ratingTable[which(ratingTable$INDEP == round((bankfull_stage_mu_m-bankfull_stage_se_m)*3.28084,2)),]$DEP)*0.0283
-  breakpoint_Q_upper <- (ratingTable[which(ratingTable$INDEP == round((bankfull_stage_mu_m+bankfull_stage_se_m)*3.28084,2)),]$DEP)*0.0283
+  if(nrow(surfaceData)< minADCPMeas){return(data.frame('site_no'=gageID,
+                                                      'lm_r2'=NA,
+                                                      'lm_depth_a'=NA,
+                                                      'lm_depth_b'=NA))}
   
   #get bankfull depth
-  lm_depth <- lm((depth_m)~(stage_m), data=surfaceData)
+  lm_depth <- lm((stage_m)~(depth_m), data=surfaceData)
   lm_depth_a <- coef(lm_depth)[1]
   lm_depth_b <- coef(lm_depth)[2]
   
-  bankfull_depth_mean <- lm_depth_a + lm_depth_b*bankfull_stage_mu_m
-  bankfull_depth_lower <- lm_depth_a + lm_depth_b*(bankfull_stage_mu_m-bankfull_stage_se_m) 
-  bankfull_depth_upper <- lm_depth_a + lm_depth_b*(bankfull_stage_mu_m+bankfull_stage_se_m)
-  
-  theme_set(theme_classic())
-  plot <- ggplot(data=surfaceData, aes(x=stage_m, y=depth_m)) +
-    geom_point(size=2) +
-    geom_smooth(method='lm', se=F, size=1.5)+
-    xlab(bquote(bold("Stage ["*m*"]"))) +
-    ylab(bquote(bold("Depth ["*m*"]"))) +
-    theme(axis.title = element_text(face = 'bold', size=18),
-          axis.text = element_text(size=15))
-  ggsave(paste0('cache/gagePlots/', gageID, '_stagedepth.png'), width=8, height=8)
-  
-  #save a plot of the bankfull regression model
-  theme_set(theme_classic())
-  
-  temp <- data.frame('breakpoint_stage_mean' = bankfull_stage_mu_m,
-                     'breakpoint_stage_sd' = bankfull_stage_se_m,
-                     'breakpoint_Q_mean' = breakpoint_Q_mean,
-                     'breakpoint_Q_lower' = breakpoint_Q_lower,
-                     'breakpoint_Q_upper' = breakpoint_Q_upper)
-
-  plot <- ggplot() +
-    geom_point(data=ratingTable, aes(x=stage_m, y=Q_cms), alpha=0.3, size=1.5) +
-    geom_pointrange(data=temp, aes(x=breakpoint_stage_mean, y=breakpoint_Q_mean, xmin = breakpoint_stage_mean-breakpoint_stage_sd, xmax = breakpoint_stage_mean + breakpoint_stage_sd, ymin = breakpoint_Q_lower, ymax = breakpoint_Q_upper), color='darkred', size=1)+
-    scale_y_log10() +
-    xlab(bquote(bold("Stage ["*m*"]"))) +
-    ylab(bquote(bold("Discharge ["*m^3*s^-1*"]"))) +
-    theme(axis.title = element_text(face = 'bold', size=18),
-          axis.text = element_text(size=15))
-  ggsave(paste0('cache/gagePlots/', gageID, '_bankfullModel.png'), width=8, height=8)
-
   #setup site info for later export
   site_info <- data.frame('site_no'=gageID,
-                          'DA_skm'=gage$DA_skm,
-                          'seg_r2'=summary(seg)$r.squared,
-                          'seg_nbreaks'=nrow(seg$psi),
-                          'depthstage_r2'=summary(lm_depth)$r.squared,
-                          'depthstage_nObs'=nrow(surfaceData),
-                          'bankfull_stage_mu_m'=bankfull_stage_mu_m,
-                          'bankfull_stage_se_m'=bankfull_stage_se_m,
-                          'bankfull_depth_mu_m'=bankfull_depth_mean,
-                          'bankfull_depth_lower'=bankfull_depth_lower,
-                          'bankfull_depth_upper'=bankfull_depth_upper,
-                          'bankfull_Q_mu_m'=breakpoint_Q_mean,
-                          'bankfull_Q_lower'=breakpoint_Q_lower,
-                          'bankfull_Q_upper'=breakpoint_Q_upper)
+                          'lm_r2'=summary(lm_depth)$r.squared,
+                          'lm_depth_a'=lm_depth_a,
+                          'lm_depth_b'=lm_depth_b)
+
+  rownames(site_info) <- NULL
+  
   return(site_info)
 }
 
 
 
 
-
-
-
-
-
-validateBankfullModel <- function(bankfullModel, BHGdata){
-  library(ggplot2)
-  theme_set(theme_classic())
-  
-  df <- dplyr::bind_rows(bankfullModel)
-
-  
-  bankfullValidationSet_Qb <- df %>%
-    dplyr::select(c('site_no', 'bankfull_Q_mu_m')) %>%
-    dplyr::left_join(BHGdata, by='site_no') %>%
-    dplyr::filter(!(is.na(Qb_cms)))
-  
-  bankfullValidationSet_Hb <- df %>%
-    dplyr::select(c('site_no', 'bankfull_depth_mu_m')) %>%
-    dplyr::left_join(BHGdata, by='site_no') %>%
-    dplyr::mutate(Hb_m = as.numeric(Hb_m)) %>%
-    dplyr::filter(!(is.na(Hb_m)))
-
-  plot_Qb <- ggplot(bankfullValidationSet_Qb, aes(x=Qb_cms, y=bankfull_Q_mu_m)) +
-    geom_abline(linetype='dashed', color='darkgrey', linewidth=1.75) +
-    geom_point(size=5) +
-    geom_smooth(method='lm', se=F) +
-    annotate("text", x = 10^1, y = 10^3, label = bquote(.(length(unique(bankfullValidationSet_Qb$site_no)))~'gages'), size=7)+
-    scale_x_log10(labels = scales::label_log(digits = 2))+#, limits=c(10^1, 10^8))+
-    scale_y_log10(labels = scales::label_log(digits = 2))+#, limits=c(10^1, 10^8))+
-    xlab(bquote(bold('In situ bankfull discharge ['*m^3~s^-1*']')))+
-    ylab(bquote(bold('Estimated bankfull discharge ['*m^3~s^-1*']')))+
-    theme(axis.title=element_text(face='bold', size=18),
-          axis.text = element_text(size=15),
-          legend.position = c(0.8, 0.2),
-          legend.text = element_text(size=15))
-  
-  plot_Hb <- ggplot(bankfullValidationSet_Hb, aes(x=Hb_m, y=bankfull_depth_mu_m)) +
-    geom_abline(linetype='dashed', color='darkgrey', linewidth=1.75) +
-    geom_point(size=5) +
-    geom_smooth(method='lm', se=F) +
-    annotate("text", x = 0.75, y = 3, label = bquote(.(length(unique(bankfullValidationSet_Hb$site_no)))~'gages'), size=7)+
- #   scale_x_log10(labels = scales::label_log(digits = 2))+#, limits=c(10^1, 10^8))+
-#    scale_y_log10(labels = scales::label_log(digits = 2))+#, limits=c(10^1, 10^8))+
-    xlab(bquote(bold('In situ bankfull depth ['*m*']')))+
-    ylab(bquote(bold('Estimated bankfull depth ['*m*']')))+
-    theme(axis.title=element_text(face='bold', size=18),
-          axis.text = element_text(size=15),
-          legend.position = c(0.8, 0.2),
-          legend.text = element_text(size=15))
-  
-  design <- "
-  AB
-  "
-  
-  comboPlot <- patchwork::wrap_plots(A=plot_Qb, B=plot_Hb, design = design)
-  
-  ggsave('cache/bankfullValidation.png', comboPlot, width=12, height=7)
-  
-  
-  return(list('Qb'=bankfullValidationSet_Qb,
-              'Hb'=bankfullValidationSet_Hb))
-}
-
-
-
-
-
-
-
-
-
-buildEventAnalysis <- function(path_to_data, huc4, gagedata, gage, bankfullModel, BHGmodel, minDuration){
-  bankfull_stage_m <- bankfullModel$stage_m
-  bankfull_depth_m <- bankfullModel$depth_m
-  
-  #if gageRecord is empty, just skip
-  if(nrow(gagedata) == 0 | is.na(bankfull_stage_m) | is.na(gage$DA_skm) | gage$DA_skm == 0) { #return empty if no gagerecord, NA stage (because of missing rating curve) or NA drainage area (because missing from gage metadata)
-    return(data.frame())
-  }
-  
+buildDepthAHG <- function(gage, minADCPMeas){
   #prep
   gageID <- gage$site_no
 
-  #calculate bankfull discharge from the published shift-adjusted rating tables
-  ratingTable <- dataRetrieval::readNWISrating(gageID, "exsa")
-  ratingTable$INDEP <- ratingTable$INDEP# + ratingTable$SHIFT
+  #prep custom rating table from available adcp measurements
+  surfaceData <- tryCatch(dataRetrieval::readNWISmeas(gageID, expanded = TRUE),
+                    error=function(m){return(data.frame('site_no'=gageID,
+                                                      'lm_r2'=NA,
+                                                      'lm_depth_a'=NA,
+                                                      'lm_depth_b'=NA))})
   
-  #only keep flowing events
-  ratingTable$stage_m <- ratingTable$INDEP * 0.3048# + ratingTable$SHIFT #ft to m
-  ratingTable$Q_cms <- ratingTable$DEP * 0.0283
-  ratingTable <- ratingTable %>%
-    dplyr::filter(stage_m > 0 & Q_cms > 0)
-  
-  #flood event analysis
-  bankfull_discharge_cms <- (ratingTable[which(ratingTable$INDEP == round(bankfull_stage_m*3.28084,2)),]$DEP)*0.0283
+  if(nrow(surfaceData)< minADCPMeas){return(data.frame('site_no'=gageID,
+                                                      'lm_r2'=NA,
+                                                      'lm_depth_a'=NA,
+                                                      'lm_depth_b'=NA))}
+  surfaceData <- surfaceData %>%
+    dplyr::filter(measured_rating_diff %in% c('Good', 'Excellent')) %>%
+    dplyr::mutate('Q_cms'=chan_discharge* 0.0283,
+                  'width_m'=chan_width*0.3048,
+                  'area_m2'=chan_area*0.092903,
+                  'velocity_ms'=chan_velocity*0.3048) %>%
+    dplyr::select(c('site_no', 'Q_cms', 'width_m', 'area_m2', 'velocity_ms')) %>%
+    dplyr::mutate(depth_m=Q_cms / (width_m*velocity_ms)) %>%
+    dplyr::filter(depth_m > 0 & Q_cms > 0 & is.finite(depth_m) & is.finite(Q_cms))
 
-  # get flood event duration from flow timeseries (workaround to handle known date class bug with midnight- https://github.com/tidyverse/lubridate/issues/1124)
-  gagedata$date <- lubridate::ymd_hms(format(as.POSIXct(gagedata$dateTime), format = "%Y-%m-%d %T %Z"))
+  #remove likely erronous outlier depth measurements
+  iqr <- IQR(surfaceData$depth_m, na.rm=T)
   
-  floods_mc <- gagedata %>%
-    dplyr::mutate(S_m = round(stage_m,3)) %>%
-    dplyr::select(c('site_no', 'date', 'S_m', 'Q_cms', 'exceed_prob')) %>%
-    dplyr::mutate(Sb_m = round(bankfull_stage_m,3),
-                  Qb_cms = bankfull_discharge_cms) %>%
-    dplyr::filter(S_m > Sb_m) %>% #both are rounded to 2 decimals (~1/2 an inch) to avoid over precision when thresholding floods
-    tidyr::drop_na() %>% #handle NA dates in the flow record (errors in USGS data)
-    dplyr::mutate(act_next = dplyr::lead(date)) %>%
-    tidyr::drop_na() #remove final timestep, where 'next' is NA
+  surfaceData <- surfaceData %>%
+    dplyr::filter(depth_m < (quantile(depth_m, 0.75, na.rm=T) + 1.5*iqr)) %>%
+    dplyr::filter(depth_m > (quantile(depth_m, 0.25, na.rm=T) - 1.5*iqr))
   
-  if(nrow(floods_mc)==0){return(data.frame())} #if no floods, move on
+  if(nrow(surfaceData)< minADCPMeas){return(data.frame('site_no'=gageID,
+                                                      'lm_r2'=NA,
+                                                      'lm_depth_a'=NA,
+                                                      'lm_depth_b'=NA))}
   
-  #calculate the 'expected' next sample timestamp, given the full flow record
-  floods_mc$index <- sapply(floods_mc$date, function(x){return(which(gagedata$date == x)+1)})
-  floods_mc$exp_next <- gagedata[floods_mc$index,]$date
+  #get bankfull depth
+  lm_depth <- lm(log(depth_m)~log(Q_cms), data=surfaceData)
+  lm_depth_a <- coef(lm_depth)[1]
+  lm_depth_b <- coef(lm_depth)[2]
   
-  #loop through flow record, finding starting and ending points of flood events
-  floods_mc$event_id <- 0
-  ticker <- 1
-  for(i in 1:nrow(floods_mc)) { #already sorted by date
-    floods_mc[i,]$event_id <- ifelse(floods_mc[i,]$exp_next == floods_mc[i,]$act_next, ticker, 0)
-    
-    if(floods_mc[i,]$event_id == 0) {
-      floods_mc[i,]$event_id <- ticker
-      ticker <- ticker + 1
-      next
-    }
-    else {
-      next
-    }
-  }
-  
-  floods_mc$event_id <- as.character(floods_mc$event_id)
-  
-  floods_mc <- floods_mc %>%
-    dplyr::select(c('site_no', 'date', 'Sb_m', 'Qb_cms', 'S_m', 'Q_cms', 'exceed_prob', 'event_id'))
-  
-  #get physiographic region (and thus bankful depth)
-  floods_mc$Hb_m <- bankfull_depth_m
-  
-  floods_mc$a_Wb <- BHGmodel[BHGmodel$division == gage$physio_region,]$a_Wb
-  floods_mc$b_Wb <- BHGmodel[BHGmodel$division == gage$physio_region,]$b_Wb
-  floods_mc$Wb_m <- floods_mc$a_Wb * (gage$DA_skm)^floods_mc$b_Wb
-  
-  # calculate exchange metrics for overbank flood events
-  event_metrics <- floods_mc %>%
-    dplyr::mutate(date=lubridate::ymd_hms(date))%>%
-    dplyr::group_by(event_id) %>%
-    dplyr::summarise(date_start = min(date),
-                     date_end = max(date),
-                     duration_min = lubridate::interval(min(date),max(date)) %/% lubridate::minutes(1),
-                     spread = mean(spread, nna.rm=T), #mean to pass constant through
-                     Hb_m = mean(Hb_m, na.rm=T), #mean to pass constant through
-                     Wb_m = mean(Wb_m, na.rm=T), #mean to pass constant through
-                     Hf_eventmean_m = mean(S_m - Sb_m, na.rm=T),
-                     S_eventmean_m = mean(S_m, na.rm=T),
-                     Q_eventmean_cms = mean(Q_cms, na.rm=T),
-                     Q_eventpeak_cms = max(Q_cms, na.rm=T),
-                     exceed_prob_eventpeak = min(exceed_prob, na.rm=T),
-                     exceed_prob_eventmean = mean(exceed_prob, na.rm=T)) %>% #exceedance prob associated with the peak discharge (i.e. lowest prob)
-    dplyr::mutate(Htf_eventmean_m = Hb_m + Hf_eventmean_m,
-                  site_no = gage$site_no) %>%
-    dplyr::relocate(site_no) %>%
-    dplyr::filter((duration_min/60) > minDuration) #remove 'events' that are too short (see input parameter)
+  #setup site info for later export
+  site_info <- data.frame('site_no'=gageID,
+                          'lm_r2'=summary(lm_depth)$r.squared,
+                          'lm_depth_a'=lm_depth_a,
+                          'lm_depth_b'=lm_depth_b)
 
-  event_metrics$event_id <- as.numeric(event_metrics$event_id)
-
-  event_metrics <- event_metrics[order(event_metrics$event_id),]
+  rownames(site_info) <- NULL
   
-  return(event_metrics)
+  return(site_info)
 }
 
 
 
 
+# buildGageBankfullModel <- function(gage, minADCPMeas){
+#   #prep
+#   gageID <- gage$site_no
+  
+#   #prep rating table
+#   ratingTable <- dataRetrieval::readNWISrating(gageID, "exsa")
+#   ratingTable$stage_m <- ratingTable$INDEP * 0.3048# + ratingTable$SHIFT #ft to m
+#   ratingTable$Q_cms <- ratingTable$DEP * 0.0283
+#   ratingTable$log10_Q_cms <- log10(ratingTable$Q_cms)
+  
+#   #prep custom rating table from available adcp measurements
+#   surfaceData <- dataRetrieval::readNWISmeas(gageID, expanded = TRUE) %>%
+#     dplyr::filter(measured_rating_diff %in% c('Good', 'Excellent')) %>%
+#     dplyr::mutate('stage_m'=gage_height_va * 0.3048,
+#                   'Q_cms'=chan_discharge* 0.0283,
+#                   'width_m'=chan_width*0.3048,
+#                   'area_m2'=chan_area*0.092903,
+#                   'velocity_ms'=chan_velocity * 0.3048) %>%
+#     dplyr::select(c('site_no', 'stage_m', 'Q_cms', 'width_m', 'area_m2', 'velocity_ms')) %>%
+#     dplyr::mutate(depth_m=Q_cms / (width_m*velocity_ms),
+#                   log10_Q_cms = log10(Q_cms))
+  
+#   #only keep flowing events
+#   ratingTable <- ratingTable %>%
+#     dplyr::filter(stage_m > 0 & Q_cms > 0)
+  
+#   surfaceData <- surfaceData %>%
+#     dplyr::filter(stage_m > 0 & Q_cms > 0)
+  
+#   #remove likely erronous outlier depth measurements
+#   iqr <- IQR(surfaceData$depth_m, na.rm=T)
+  
+#   surfaceData <- surfaceData %>%
+#     dplyr::filter(depth_m < (quantile(depth_m, 0.75, na.rm=T) + 1.5*iqr)) %>%
+#     dplyr::filter(depth_m > (quantile(depth_m, 0.25, na.rm=T) - 1.5*iqr))
+  
+#   if(nrow(ratingTable)==0 | nrow(surfaceData)< minADCPMeas){return(data.frame('site_no'=gageID,
+#                                                                     'DA_skm'=NA,
+#                                                                     'seg_r2'=NA,
+#                                                                     'seg_nbreaks'=NA,
+#                                                                     'depthstage_r2'=NA,
+#                                                                     'bankfull_stage_mu_m'=NA,
+#                                                                     'bankfull_stage_se_m'=NA,
+#                                                                     'bankfull_depth_mu_m'=NA,
+#                                                                     'bankfull_depth_lower'=NA,
+#                                                                     'bankfull_depth_upper'=NA,
+#                                                                     'bankfull_Q_mu_m'=NA,
+#                                                                     'bankfull_Q_lower'=NA,
+#                                                                     'bankfull_Q_upper'=NA))}
+  
+#   #segmented regression
+#   #linear regression for segmented
+#   lm <- lm(log10_Q_cms~stage_m, data=ratingTable)
+
+#   #fit breakpoint models with 0-2 breakpoints, keeping the one with the best bic
+#   seg <- segmented::selgmented(lm, Kmax=2, type='bic')
+
+#   bankfull_stage_mu_m <- seg$psi[nrow(seg$psi),2] #always use higher of the breakpoints
+#   bankfull_stage_se_m <- seg$psi[nrow(seg$psi),3] #always use higher of the breakpoints
+  
+#   #get bankfull Q
+#   breakpoint_Q_mean <- (ratingTable[which(ratingTable$INDEP == round(bankfull_stage_mu_m*3.28084,2)),]$DEP)*0.0283
+#   breakpoint_Q_lower <- (ratingTable[which(ratingTable$INDEP == round((bankfull_stage_mu_m-bankfull_stage_se_m)*3.28084,2)),]$DEP)*0.0283
+#   breakpoint_Q_upper <- (ratingTable[which(ratingTable$INDEP == round((bankfull_stage_mu_m+bankfull_stage_se_m)*3.28084,2)),]$DEP)*0.0283
+  
+#   #get bankfull depth
+#   lm_depth <- lm((depth_m)~(stage_m), data=surfaceData)
+#   lm_depth_a <- coef(lm_depth)[1]
+#   lm_depth_b <- coef(lm_depth)[2]
+  
+#   bankfull_depth_mean <- lm_depth_a + lm_depth_b*bankfull_stage_mu_m
+#   bankfull_depth_lower <- lm_depth_a + lm_depth_b*(bankfull_stage_mu_m-bankfull_stage_se_m) 
+#   bankfull_depth_upper <- lm_depth_a + lm_depth_b*(bankfull_stage_mu_m+bankfull_stage_se_m)
+  
+#   theme_set(theme_classic())
+#   plot <- ggplot(data=surfaceData, aes(x=stage_m, y=depth_m)) +
+#     geom_point(size=2) +
+#     geom_smooth(method='lm', se=F, size=1.5)+
+#     xlab(bquote(bold("Stage ["*m*"]"))) +
+#     ylab(bquote(bold("Depth ["*m*"]"))) +
+#     theme(axis.title = element_text(face = 'bold', size=18),
+#           axis.text = element_text(size=15))
+#   ggsave(paste0('cache/gagePlots/', gageID, '_stagedepth.png'), width=8, height=8)
+  
+#   #save a plot of the bankfull regression model
+#   theme_set(theme_classic())
+  
+#   temp <- data.frame('breakpoint_stage_mean' = bankfull_stage_mu_m,
+#                      'breakpoint_stage_sd' = bankfull_stage_se_m,
+#                      'breakpoint_Q_mean' = breakpoint_Q_mean,
+#                      'breakpoint_Q_lower' = breakpoint_Q_lower,
+#                      'breakpoint_Q_upper' = breakpoint_Q_upper)
+
+#   plot <- ggplot() +
+#     geom_point(data=ratingTable, aes(x=stage_m, y=Q_cms), alpha=0.3, size=1.5) +
+#     geom_pointrange(data=temp, aes(x=breakpoint_stage_mean, y=breakpoint_Q_mean, xmin = breakpoint_stage_mean-breakpoint_stage_sd, xmax = breakpoint_stage_mean + breakpoint_stage_sd, ymin = breakpoint_Q_lower, ymax = breakpoint_Q_upper), color='darkred', size=1)+
+#     scale_y_log10() +
+#     xlab(bquote(bold("Stage ["*m*"]"))) +
+#     ylab(bquote(bold("Discharge ["*m^3*s^-1*"]"))) +
+#     theme(axis.title = element_text(face = 'bold', size=18),
+#           axis.text = element_text(size=15))
+#   ggsave(paste0('cache/gagePlots/', gageID, '_bankfullModel.png'), width=8, height=8)
+
+#   #setup site info for later export
+#   site_info <- data.frame('site_no'=gageID,
+#                           'DA_skm'=gage$DA_skm,
+#                           'seg_r2'=summary(seg)$r.squared,
+#                           'seg_nbreaks'=nrow(seg$psi),
+#                           'depthstage_r2'=summary(lm_depth)$r.squared,
+#                           'depthstage_nObs'=nrow(surfaceData),
+#                           'bankfull_stage_mu_m'=bankfull_stage_mu_m,
+#                           'bankfull_stage_se_m'=bankfull_stage_se_m,
+#                           'bankfull_depth_mu_m'=bankfull_depth_mean,
+#                           'bankfull_depth_lower'=bankfull_depth_lower,
+#                           'bankfull_depth_upper'=bankfull_depth_upper,
+#                           'bankfull_Q_mu_m'=breakpoint_Q_mean,
+#                           'bankfull_Q_lower'=breakpoint_Q_lower,
+#                           'bankfull_Q_upper'=breakpoint_Q_upper)
+#   return(site_info)
+# }
 
 
 
-buildEventAnalysis_full <- function(event_metrics, gages) {
-  gages_fin <- dplyr::bind_rows(gages) %>%
+
+
+
+
+
+
+# validateBankfullModel <- function(bankfullModel, BHGdata){
+#   library(ggplot2)
+#   theme_set(theme_classic())
+  
+#   df <- dplyr::bind_rows(bankfullModel)
+
+  
+#   bankfullValidationSet_Qb <- df %>%
+#     dplyr::select(c('site_no', 'bankfull_Q_mu_m')) %>%
+#     dplyr::left_join(BHGdata, by='site_no') %>%
+#     dplyr::filter(!(is.na(Qb_cms)))
+  
+#   bankfullValidationSet_Hb <- df %>%
+#     dplyr::select(c('site_no', 'bankfull_depth_mu_m')) %>%
+#     dplyr::left_join(BHGdata, by='site_no') %>%
+#     dplyr::mutate(Hb_m = as.numeric(Hb_m)) %>%
+#     dplyr::filter(!(is.na(Hb_m)))
+
+#   plot_Qb <- ggplot(bankfullValidationSet_Qb, aes(x=Qb_cms, y=bankfull_Q_mu_m)) +
+#     geom_abline(linetype='dashed', color='darkgrey', linewidth=1.75) +
+#     geom_point(size=5) +
+#     geom_smooth(method='lm', se=F) +
+#     annotate("text", x = 10^1, y = 10^3, label = bquote(.(length(unique(bankfullValidationSet_Qb$site_no)))~'gages'), size=7)+
+#     scale_x_log10(labels = scales::label_log(digits = 2))+#, limits=c(10^1, 10^8))+
+#     scale_y_log10(labels = scales::label_log(digits = 2))+#, limits=c(10^1, 10^8))+
+#     xlab(bquote(bold('In situ bankfull discharge ['*m^3~s^-1*']')))+
+#     ylab(bquote(bold('Estimated bankfull discharge ['*m^3~s^-1*']')))+
+#     theme(axis.title=element_text(face='bold', size=18),
+#           axis.text = element_text(size=15),
+#           legend.position = c(0.8, 0.2),
+#           legend.text = element_text(size=15))
+  
+#   plot_Hb <- ggplot(bankfullValidationSet_Hb, aes(x=Hb_m, y=bankfull_depth_mu_m)) +
+#     geom_abline(linetype='dashed', color='darkgrey', linewidth=1.75) +
+#     geom_point(size=5) +
+#     geom_smooth(method='lm', se=F) +
+#     annotate("text", x = 0.75, y = 3, label = bquote(.(length(unique(bankfullValidationSet_Hb$site_no)))~'gages'), size=7)+
+#  #   scale_x_log10(labels = scales::label_log(digits = 2))+#, limits=c(10^1, 10^8))+
+# #    scale_y_log10(labels = scales::label_log(digits = 2))+#, limits=c(10^1, 10^8))+
+#     xlab(bquote(bold('In situ bankfull depth ['*m*']')))+
+#     ylab(bquote(bold('Estimated bankfull depth ['*m*']')))+
+#     theme(axis.title=element_text(face='bold', size=18),
+#           axis.text = element_text(size=15),
+#           legend.position = c(0.8, 0.2),
+#           legend.text = element_text(size=15))
+  
+#   design <- "
+#   AB
+#   "
+  
+#   comboPlot <- patchwork::wrap_plots(A=plot_Qb, B=plot_Hb, design = design)
+  
+#   ggsave('cache/bankfullValidation.png', comboPlot, width=12, height=7)
+  
+  
+#   return(list('Qb'=bankfullValidationSet_Qb,
+#               'Hb'=bankfullValidationSet_Hb))
+# }
+
+
+
+
+
+
+
+
+
+# buildEventAnalysis <- function(path_to_data, huc4, gagedata, gage, bankfullModel, BHGmodel, minDuration){
+#   bankfull_stage_m <- bankfullModel$stage_m
+#   bankfull_depth_m <- bankfullModel$depth_m
+  
+#   #if gageRecord is empty, just skip
+#   if(nrow(gagedata) == 0 | is.na(bankfull_stage_m) | is.na(gage$DA_skm) | gage$DA_skm == 0) { #return empty if no gagerecord, NA stage (because of missing rating curve) or NA drainage area (because missing from gage metadata)
+#     return(data.frame())
+#   }
+  
+#   #prep
+#   gageID <- gage$site_no
+
+#   #calculate bankfull discharge from the published shift-adjusted rating tables
+#   ratingTable <- dataRetrieval::readNWISrating(gageID, "exsa")
+#   ratingTable$INDEP <- ratingTable$INDEP# + ratingTable$SHIFT
+  
+#   #only keep flowing events
+#   ratingTable$stage_m <- ratingTable$INDEP * 0.3048# + ratingTable$SHIFT #ft to m
+#   ratingTable$Q_cms <- ratingTable$DEP * 0.0283
+#   ratingTable <- ratingTable %>%
+#     dplyr::filter(stage_m > 0 & Q_cms > 0)
+  
+#   #flood event analysis
+#   bankfull_discharge_cms <- (ratingTable[which(ratingTable$INDEP == round(bankfull_stage_m*3.28084,2)),]$DEP)*0.0283
+
+#   # get flood event duration from flow timeseries (workaround to handle known date class bug with midnight- https://github.com/tidyverse/lubridate/issues/1124)
+#   gagedata$date <- lubridate::ymd_hms(format(as.POSIXct(gagedata$dateTime), format = "%Y-%m-%d %T %Z"))
+  
+#   floods_mc <- gagedata %>%
+#     dplyr::mutate(S_m = round(stage_m,3)) %>%
+#     dplyr::select(c('site_no', 'date', 'S_m', 'Q_cms', 'exceed_prob')) %>%
+#     dplyr::mutate(Sb_m = round(bankfull_stage_m,3),
+#                   Qb_cms = bankfull_discharge_cms) %>%
+#     dplyr::filter(S_m > Sb_m) %>% #both are rounded to 2 decimals (~1/2 an inch) to avoid over precision when thresholding floods
+#     tidyr::drop_na() %>% #handle NA dates in the flow record (errors in USGS data)
+#     dplyr::mutate(act_next = dplyr::lead(date)) %>%
+#     tidyr::drop_na() #remove final timestep, where 'next' is NA
+  
+#   if(nrow(floods_mc)==0){return(data.frame())} #if no floods, move on
+  
+#   #calculate the 'expected' next sample timestamp, given the full flow record
+#   floods_mc$index <- sapply(floods_mc$date, function(x){return(which(gagedata$date == x)+1)})
+#   floods_mc$exp_next <- gagedata[floods_mc$index,]$date
+  
+#   #loop through flow record, finding starting and ending points of flood events
+#   floods_mc$event_id <- 0
+#   ticker <- 1
+#   for(i in 1:nrow(floods_mc)) { #already sorted by date
+#     floods_mc[i,]$event_id <- ifelse(floods_mc[i,]$exp_next == floods_mc[i,]$act_next, ticker, 0)
+    
+#     if(floods_mc[i,]$event_id == 0) {
+#       floods_mc[i,]$event_id <- ticker
+#       ticker <- ticker + 1
+#       next
+#     }
+#     else {
+#       next
+#     }
+#   }
+  
+#   floods_mc$event_id <- as.character(floods_mc$event_id)
+  
+#   floods_mc <- floods_mc %>%
+#     dplyr::select(c('site_no', 'date', 'Sb_m', 'Qb_cms', 'S_m', 'Q_cms', 'exceed_prob', 'event_id'))
+  
+#   #get physiographic region (and thus bankful depth)
+#   floods_mc$Hb_m <- bankfull_depth_m
+  
+#   floods_mc$a_Wb <- BHGmodel[BHGmodel$division == gage$physio_region,]$a_Wb
+#   floods_mc$b_Wb <- BHGmodel[BHGmodel$division == gage$physio_region,]$b_Wb
+#   floods_mc$Wb_m <- floods_mc$a_Wb * (gage$DA_skm)^floods_mc$b_Wb
+  
+#   # calculate exchange metrics for overbank flood events
+#   event_metrics <- floods_mc %>%
+#     dplyr::mutate(date=lubridate::ymd_hms(date))%>%
+#     dplyr::group_by(event_id) %>%
+#     dplyr::summarise(date_start = min(date),
+#                      date_end = max(date),
+#                      duration_min = lubridate::interval(min(date),max(date)) %/% lubridate::minutes(1),
+#                      spread = mean(spread, nna.rm=T), #mean to pass constant through
+#                      Hb_m = mean(Hb_m, na.rm=T), #mean to pass constant through
+#                      Wb_m = mean(Wb_m, na.rm=T), #mean to pass constant through
+#                      Hf_eventmean_m = mean(S_m - Sb_m, na.rm=T),
+#                      S_eventmean_m = mean(S_m, na.rm=T),
+#                      Q_eventmean_cms = mean(Q_cms, na.rm=T),
+#                      Q_eventpeak_cms = max(Q_cms, na.rm=T),
+#                      exceed_prob_eventpeak = min(exceed_prob, na.rm=T),
+#                      exceed_prob_eventmean = mean(exceed_prob, na.rm=T)) %>% #exceedance prob associated with the peak discharge (i.e. lowest prob)
+#     dplyr::mutate(Htf_eventmean_m = Hb_m + Hf_eventmean_m,
+#                   site_no = gage$site_no) %>%
+#     dplyr::relocate(site_no) %>%
+#     dplyr::filter((duration_min/60) > minDuration) #remove 'events' that are too short (see input parameter)
+
+#   event_metrics$event_id <- as.numeric(event_metrics$event_id)
+
+#   event_metrics <- event_metrics[order(event_metrics$event_id),]
+  
+#   return(event_metrics)
+# }
+
+
+
+
+
+
+
+# buildEventAnalysis_full <- function(event_metrics, gages) {
+#   gages_fin <- dplyr::bind_rows(gages) %>%
+#     sf::st_drop_geometry()
+  
+#   #summarise across monte carlo simulations
+#   event_metrics_fin <- dplyr::bind_rows(event_metrics) %>%
+#     dplyr::group_by(site_no, event_id) %>% #to summarise across MC simuls
+#     dplyr::summarise_at(c('Wb_m', 'Hb_m', 'date_start', 'duration_min','exceed_prob_eventmean', 'Q_eventmean_cms', 'Htf_eventmean_m', 'Hf_eventmean_m'), list(mean=mean, sd=sd)) %>%
+#     dplyr::rename(date_start = date_start_mean, #these cols don't vary across the MC simuls, so just recast back to static variables
+#                   duration_min = duration_min_mean,
+#                   Wb_m = Wb_m_mean,
+#                   Hb_m = Hb_m_mean) %>%
+#     dplyr::select(!c('duration_min_sd', 'Wb_m_sd', 'Hb_m_sd')) %>%
+#     dplyr::left_join(gages_fin, by='site_no') %>%
+#     dplyr::relocate(site_no, physio_region, DA_skm, Wb_m, Hb_m) %>%
+#     dplyr::rename(region=physio_region)
+  
+#   return(event_metrics_fin)
+# }
+
+
+
+
+
+
+# buildUpscalingModel <- function(huc4, floodEvents, gageRecordStart, gageRecordEnd){
+#   huc2 <- substr(huc4, 1, 2)
+  
+#   #get duration of entire gage record
+#   duration_dys <- lubridate::ymd(gageRecordEnd) - lubridate::ymd(gageRecordStart)
+  
+#   #get mean flood depths across flood events
+#   forModel_mean <- floodEvents %>%
+#     dplyr::group_by(site_no) %>%
+#     dplyr::summarise(meanflood_Htf_m = mean(Htf_eventmean_m_mean, na.rm=T),
+#                      DA_skm = mean(DA_skm, na.rm=T)) #mean to carry through summarise
+  
+#   #Q0.5 flood
+#   q05_forModel <- floodEvents %>%
+#     dplyr::group_by(site_no) %>%
+#     dplyr::mutate(diff = abs(exceed_prob_eventmean_mean - 0.005)) %>% 
+#     dplyr::slice_min(diff) %>%
+#     dplyr::ungroup() %>%
+#     dplyr::filter(diff < 0.01) %>% #make sure the floods are actually in the record, i.e. flow must be within 1% of expected exceedance probability
+#     dplyr::mutate(q05flood_Htf_m = Htf_eventmean_m_mean) %>%
+#     dplyr::select(c('site_no','q05flood_Htf_m'))
+
+
+#   #Q1 flood
+#   q1_forModel <- floodEvents %>%
+#     dplyr::group_by(site_no) %>%
+#     dplyr::mutate(diff = abs(exceed_prob_eventmean_mean - 0.01)/0.01) %>% 
+#     dplyr::slice_min(diff) %>%
+#     dplyr::ungroup() %>%
+#     dplyr::filter(diff < 0.20) %>% #make sure the floods are actually in the record, i.e. flow must be within 1% of expected exceedance probability
+#     dplyr::mutate(q1flood_Htf_m = Htf_eventmean_m_mean) %>%
+#     dplyr::select(c('site_no','q1flood_Htf_m'))
+  
+#   #Q5 flood
+#   q5_forModel <- floodEvents %>%
+#     dplyr::group_by(site_no) %>%
+#     dplyr::mutate(diff = abs(exceed_prob_eventmean_mean - 0.05)/0.05) %>% 
+#     dplyr::slice_min(diff) %>%
+#     dplyr::ungroup() %>%
+#     dplyr::filter(diff < 0.20) %>% #make sure the floods are actually in the record, i.e. flow must be within 1% of expected exceedance probability
+#     dplyr::mutate(q5flood_Htf_m = Htf_eventmean_m_mean) %>%
+#     dplyr::select(c('site_no','q5flood_Htf_m'))
+
+#   #Q10 flood
+#   q10_forModel <- floodEvents %>%
+#     dplyr::group_by(site_no) %>%
+#     dplyr::mutate(diff = abs(exceed_prob_eventmean_mean - 0.1)/0.1) %>% 
+#     dplyr::slice_min(diff) %>%
+#     dplyr::ungroup() %>%
+#     dplyr::filter(diff < 0.2) %>% #make sure the floods are actually in the record, i.e. flow must be within 1% of expected exceedance probability
+#     dplyr::mutate(q10flood_Htf_m = Htf_eventmean_m_mean) %>%
+#     dplyr::select(c('site_no','q10flood_Htf_m'))
+
+#   #Q25 flood
+#   q25_forModel <- floodEvents %>%
+#     dplyr::group_by(site_no) %>%
+#     dplyr::mutate(diff = abs(exceed_prob_eventmean_mean - 0.25)/0.25) %>% 
+#     dplyr::slice_min(diff) %>%
+#     dplyr::ungroup() %>%
+#     dplyr::filter(diff < 0.20) %>% #make sure the floods are actually in the record, i.e. flow must be within 1% of expected exceedance probability
+#     dplyr::mutate(q25flood_Htf_m = Htf_eventmean_m_mean) %>%
+#     dplyr::select(c('site_no','q25flood_Htf_m'))
+
+#   forModel <- forModel_mean %>%
+#     dplyr::left_join(q05_forModel, by='site_no') %>%
+#     dplyr::left_join(q1_forModel, by='site_no') %>%
+#     dplyr::left_join(q5_forModel, by='site_no') %>%
+#     dplyr::left_join(q10_forModel, by='site_no') %>%
+#     dplyr::left_join(q25_forModel, by='site_no') %>%
+#     tidyr::pivot_longer(c('meanflood_Htf_m', 'q05flood_Htf_m', 'q1flood_Htf_m', 'q5flood_Htf_m', 'q10flood_Htf_m', 'q25flood_Htf_m'))
+
+#   #fit Htf models
+#   models_r2 <- forModel %>%
+#     dplyr::group_by(name) %>%
+#     dplyr::mutate(broom::glance(lm(log(value) ~ log(DA_skm)))) %>%
+#     dplyr::summarise(n_gages=sum(!(is.na(value))),
+#                     rsq = mean(adj.r.squared, na.rm=T)) %>% #mean to pass the constant through
+#     dplyr::select(c(name, n_gages, rsq))
+
+#   models <- forModel %>%
+#     dplyr::group_by(name) %>%
+#     dplyr::group_modify(~ broom::tidy(lm(log(value) ~ log(DA_skm), data = .x))) %>%
+#     dplyr::select(name:std.error) %>%
+#     dplyr::left_join(models_r2, by='name') %>%
+#     tidyr::pivot_wider(names_from=term, values_from=c(estimate, std.error, n_gages, rsq)) %>%
+#     dplyr::select(c('name', 'estimate_(Intercept)','estimate_log(DA_skm)', 'std.error_(Intercept)', 'std.error_log(DA_skm)', 'n_gages_(Intercept)', 'rsq_(Intercept)'))
+  
+#   colnames(models) <- c('name', 'coef','exp', 'stderr_coef', 'stderr_exp', 'n_gages', 'rsq')
+  
+#   theme_set(theme_classic())
+  
+#   plot <- ggplot(forModel, aes(x=DA_skm, y=value)) +
+#     geom_point(size=5, color='#153131')+
+#     geom_smooth(method='lm', se=F, color='black',linewidth=1.25) +
+#     scale_x_log10()+
+#     scale_y_log10() +
+#     ylab(bquote(bold("Flood level ["*m*"]"))) +
+#     xlab(bquote(bold("Drainage Area ["*km^2*"]"))) +
+#     theme(axis.title = element_text(face = 'bold', size=18),
+#           axis.text = element_text(size=15),
+#           plot.title = element_text(face = 'bold', size=22)) +
+#     facet_wrap(~factor(name, levels=c('meanflood_Htf_m', 'q05flood_Htf_m', 'q1flood_Htf_m', 'q5flood_Htf_m', 'q10flood_Htf_m', 'q25flood_Htf_m'),
+#                           labels=c('Mean flood', '0.5% flow', '1% flow', '5% flow', '10% flow', '25% flow'))) +
+#     geom_text(data = models_r2, aes(x = 10^1.5, y = 5, label = paste0('rsq: ',round(rsq,2))), size=6) +
+#     geom_text(data = models_r2, aes(x = 10^1.5, y = 3.5, label = paste0(n_gages, ' gages')), size=6) +
+#     theme(strip.text.x = element_text(size = 20))
+  
+#   ggsave(paste0('cache/upscalingModel.png'), plot, width=12, height=12)
+  
+#   return(models)
+# }
+
+
+
+
+
+
+buildUpscalingModel_v2 <- function(huc4, gageRecord, gage, stageDepthModel, BHGmodel, gageRecordStart, gageRecordEnd){
+  huc2 <- substr(huc4, 1, 2)
+
+  #setup
+  stageDepthModel <- dplyr::bind_rows(stageDepthModel)
+
+  gageRecord <- dplyr::bind_rows(gageRecord) %>%
+    dplyr::select(c('site_no', 'date_hr', 'Q_cms', 'stage_m', 'exceed_prob'))
+  
+  gage <- sf::st_drop_geometry(gage) %>% 
+    dplyr::bind_rows() %>% 
+    dplyr::select(c('site_no', 'DA_skm', 'physio_region')) %>% 
     sf::st_drop_geometry()
   
-  #summarise across monte carlo simulations
-  event_metrics_fin <- dplyr::bind_rows(event_metrics) %>%
-    dplyr::group_by(site_no, event_id) %>% #to summarise across MC simuls
-    dplyr::summarise_at(c('Wb_m', 'Hb_m', 'date_start', 'duration_min','exceed_prob_eventmean', 'Q_eventmean_cms', 'Htf_eventmean_m', 'Hf_eventmean_m'), list(mean=mean, sd=sd)) %>%
-    dplyr::rename(date_start = date_start_mean, #these cols don't vary across the MC simuls, so just recast back to static variables
-                  duration_min = duration_min_mean,
-                  Wb_m = Wb_m_mean,
-                  Hb_m = Hb_m_mean) %>%
-    dplyr::select(!c('duration_min_sd', 'Wb_m_sd', 'Hb_m_sd')) %>%
-    dplyr::left_join(gages_fin, by='site_no') %>%
-    dplyr::relocate(site_no, physio_region, DA_skm, Wb_m, Hb_m) %>%
-    dplyr::rename(region=physio_region)
-  
-  return(event_metrics_fin)
-}
+  #bring everything together
+  upscaling_df <- gageRecord %>%
+    dplyr::left_join(gage, by='site_no') %>%
+    dplyr::left_join(stageDepthModel, by='site_no')
 
-
-
-
-
-
-buildUpscalingModel <- function(huc4, floodEvents, gageRecordStart, gageRecordEnd){
-  huc2 <- substr(huc4, 1, 2)
-  
   #get duration of entire gage record
   duration_dys <- lubridate::ymd(gageRecordEnd) - lubridate::ymd(gageRecordStart)
-  
-  #get mean flood depths across flood events
-  forModel_mean <- floodEvents %>%
-    dplyr::group_by(site_no) %>%
-    dplyr::summarise(meanflood_Htf_m = mean(Htf_eventmean_m_mean, na.rm=T),
-                     DA_skm = mean(DA_skm, na.rm=T)) #mean to carry through summarise
-  
-  #Q0.5 flood
-  q05_forModel <- floodEvents %>%
-    dplyr::group_by(site_no) %>%
-    dplyr::mutate(diff = abs(exceed_prob_eventmean_mean - 0.005)) %>% 
-    dplyr::slice_min(diff) %>%
-    dplyr::ungroup() %>%
-    dplyr::filter(diff < 0.01) %>% #make sure the floods are actually in the record, i.e. flow must be within 1% of expected exceedance probability
-    dplyr::mutate(q05flood_Htf_m = Htf_eventmean_m_mean) %>%
-    dplyr::select(c('site_no','q05flood_Htf_m'))
 
+  #add bankfull depth and width (vectorized loops faster than apply for this huge df)
+  a_Wb <- seq(1, nrow(upscaling_df))
+  b_Wb <- seq(1, nrow(upscaling_df))
+  a_Hb <- seq(1, nrow(upscaling_df))
+  b_Hb <- seq(1, nrow(upscaling_df))
+  region <- upscaling_df$physio_region
+
+  for(i in 1:length(region)){
+    a_Wb[i] <- BHGmodel[BHGmodel$division == region[i],]$a_Wb
+    b_Wb[i] <- BHGmodel[BHGmodel$division == region[i],]$b_Wb
+    a_Hb[i] <- BHGmodel[BHGmodel$division == region[i],]$a_Hb
+    b_Hb[i] <- BHGmodel[BHGmodel$division == region[i],]$b_Hb
+  }
+
+  upscaling_df$a_Wb <- a_Wb
+  upscaling_df$b_Wb <- b_Wb
+  upscaling_df$a_Hb <- a_Hb
+  upscaling_df$b_Hb <- b_Hb
+
+  upscaling_df$Wb_m <- upscaling_df$a_Wb * upscaling_df$DA_skm^upscaling_df$b_Wb
+  upscaling_df$Hb_m <- upscaling_df$a_Hb * (upscaling_df$DA_skm)^upscaling_df$b_Hb
+
+  #convert Hb to a Sb using per-gage relationships
+  upscaling_df$Sb_m <- upscaling_df$lm_depth_a + (upscaling_df$lm_depth_b*upscaling_df$Hb_m)
+
+  #calculate water level, relative to channel bottom
+  upscaling_df$Htf_m <- upscaling_df$Hb_m + (upscaling_df$stage_m - upscaling_df$Sb_m)
+
+  #Q0.1 flood
+  q01_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.001)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q01flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no', 'q01flood_Htf_m'))
+
+  #Q0.5 flood
+  q05_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.005)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q05flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no', 'q05flood_Htf_m'))
 
   #Q1 flood
-  q1_forModel <- floodEvents %>%
+  q1_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
-    dplyr::mutate(diff = abs(exceed_prob_eventmean_mean - 0.01)/0.01) %>% 
-    dplyr::slice_min(diff) %>%
-    dplyr::ungroup() %>%
-    dplyr::filter(diff < 0.20) %>% #make sure the floods are actually in the record, i.e. flow must be within 1% of expected exceedance probability
-    dplyr::mutate(q1flood_Htf_m = Htf_eventmean_m_mean) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.01)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q1flood_Htf_m = Htf_m) %>%
     dplyr::select(c('site_no','q1flood_Htf_m'))
   
-  #Q5 flood
-  q5_forModel <- floodEvents %>%
+  #Q2.5 flood
+  q205_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
-    dplyr::mutate(diff = abs(exceed_prob_eventmean_mean - 0.05)/0.05) %>% 
-    dplyr::slice_min(diff) %>%
-    dplyr::ungroup() %>%
-    dplyr::filter(diff < 0.20) %>% #make sure the floods are actually in the record, i.e. flow must be within 1% of expected exceedance probability
-    dplyr::mutate(q5flood_Htf_m = Htf_eventmean_m_mean) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.025)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q205flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no','q205flood_Htf_m'))
+  
+  #Q5 flood
+  q5_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.05)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q5flood_Htf_m = Htf_m) %>%
     dplyr::select(c('site_no','q5flood_Htf_m'))
 
   #Q10 flood
-  q10_forModel <- floodEvents %>%
+  q10_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
-    dplyr::mutate(diff = abs(exceed_prob_eventmean_mean - 0.1)/0.1) %>% 
-    dplyr::slice_min(diff) %>%
-    dplyr::ungroup() %>%
-    dplyr::filter(diff < 0.2) %>% #make sure the floods are actually in the record, i.e. flow must be within 1% of expected exceedance probability
-    dplyr::mutate(q10flood_Htf_m = Htf_eventmean_m_mean) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.1)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q10flood_Htf_m = Htf_m) %>%
     dplyr::select(c('site_no','q10flood_Htf_m'))
 
-  #Q25 flood
-  q25_forModel <- floodEvents %>%
+  #Q15 flood
+  q15_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
-    dplyr::mutate(diff = abs(exceed_prob_eventmean_mean - 0.25)/0.25) %>% 
-    dplyr::slice_min(diff) %>%
-    dplyr::ungroup() %>%
-    dplyr::filter(diff < 0.20) %>% #make sure the floods are actually in the record, i.e. flow must be within 1% of expected exceedance probability
-    dplyr::mutate(q25flood_Htf_m = Htf_eventmean_m_mean) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.15)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q15flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no','q15flood_Htf_m'))
+
+  #Q20 flood
+  q20_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.20)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q20flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no','q20flood_Htf_m'))
+  
+  #Q25 flood
+  q25_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.25)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q25flood_Htf_m = Htf_m) %>%
     dplyr::select(c('site_no','q25flood_Htf_m'))
 
-  forModel <- forModel_mean %>%
+  forModel <- gage %>%
+    dplyr::left_join(q01_forModel, by='site_no') %>%
     dplyr::left_join(q05_forModel, by='site_no') %>%
     dplyr::left_join(q1_forModel, by='site_no') %>%
+    dplyr::left_join(q205_forModel, by='site_no') %>%
     dplyr::left_join(q5_forModel, by='site_no') %>%
     dplyr::left_join(q10_forModel, by='site_no') %>%
+    dplyr::left_join(q15_forModel, by='site_no') %>%
+    dplyr::left_join(q20_forModel, by='site_no') %>%
     dplyr::left_join(q25_forModel, by='site_no') %>%
-    tidyr::pivot_longer(c('meanflood_Htf_m', 'q05flood_Htf_m', 'q1flood_Htf_m', 'q5flood_Htf_m', 'q10flood_Htf_m', 'q25flood_Htf_m'))
+    tidyr::pivot_longer(c('q01flood_Htf_m', 'q05flood_Htf_m', 'q1flood_Htf_m', 'q205flood_Htf_m', 'q5flood_Htf_m', 'q10flood_Htf_m', 'q15flood_Htf_m', 'q20flood_Htf_m', 'q25flood_Htf_m'))
 
   #fit Htf models
   models_r2 <- forModel %>%
@@ -752,8 +1115,8 @@ buildUpscalingModel <- function(huc4, floodEvents, gageRecordStart, gageRecordEn
     theme(axis.title = element_text(face = 'bold', size=18),
           axis.text = element_text(size=15),
           plot.title = element_text(face = 'bold', size=22)) +
-    facet_wrap(~factor(name, levels=c('meanflood_Htf_m', 'q05flood_Htf_m', 'q1flood_Htf_m', 'q5flood_Htf_m', 'q10flood_Htf_m', 'q25flood_Htf_m'),
-                          labels=c('Mean flood', '0.5% flow', '1% flow', '5% flow', '10% flow', '25% flow'))) +
+    facet_wrap(~factor(name, levels=c('q01flood_Htf_m', 'q05flood_Htf_m', 'q1flood_Htf_m', 'q205flood_Htf_m', 'q5flood_Htf_m', 'q10flood_Htf_m', 'q15flood_Htf_m', 'q20flood_Htf_m', 'q25flood_Htf_m'),
+                          labels=c('0.1% flow','0.5% flow', '1% flow', '2.5% flow','5% flow', '10% flow', '15% flow','20% flow', '25% flow'))) +
     geom_text(data = models_r2, aes(x = 10^1.5, y = 5, label = paste0('rsq: ',round(rsq,2))), size=6) +
     geom_text(data = models_r2, aes(x = 10^1.5, y = 3.5, label = paste0(n_gages, ' gages')), size=6) +
     theme(strip.text.x = element_text(size = 20))
@@ -765,6 +1128,158 @@ buildUpscalingModel <- function(huc4, floodEvents, gageRecordStart, gageRecordEn
 
 
 
+
+buildUpscalingModel_v2ahg <- function(huc4, gageRecord, gage, stageDepthModel, gageRecordStart, gageRecordEnd){
+  huc2 <- substr(huc4, 1, 2)
+
+  #setup
+  stageDepthModel <- dplyr::bind_rows(stageDepthModel)
+
+  gageRecord <- dplyr::bind_rows(gageRecord) %>%
+    dplyr::select(c('site_no', 'date_hr', 'Q_cms', 'exceed_prob'))
+  
+  gage <- sf::st_drop_geometry(gage) %>% 
+    dplyr::bind_rows() %>% 
+    dplyr::select(c('site_no', 'DA_skm', 'physio_region')) %>% 
+    sf::st_drop_geometry()
+  
+  #bring everything together
+  upscaling_df <- gageRecord %>%
+    dplyr::left_join(gage, by='site_no') %>%
+    dplyr::left_join(stageDepthModel, by='site_no') %>%
+    dplyr::filter(!(is.na(DA_skm))) %>%
+    dplyr::filter(lm_r2 > 0.30)
+
+  #get duration of entire gage record
+  duration_dys <- lubridate::ymd(gageRecordEnd) - lubridate::ymd(gageRecordStart)
+
+  #calculate water level, relative to channel bottom
+  upscaling_df$Htf_m <- exp(upscaling_df$lm_depth_a)*upscaling_df$Q_cms^upscaling_df$lm_depth_b
+
+  #Q0.1 flood
+  q01_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.001)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q01flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no', 'q01flood_Htf_m'))
+
+  #Q0.5 flood
+  q05_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.005)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q05flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no', 'q05flood_Htf_m'))
+
+  #Q1 flood
+  q1_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.01)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q1flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no','q1flood_Htf_m'))
+  
+  #Q2.5 flood
+  q205_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.025)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q205flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no','q205flood_Htf_m'))
+  
+  #Q5 flood
+  q5_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.05)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q5flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no','q5flood_Htf_m'))
+
+  #Q10 flood
+  q10_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.1)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q10flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no','q10flood_Htf_m'))
+
+  #Q15 flood
+  q15_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.15)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q15flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no','q15flood_Htf_m'))
+
+  #Q20 flood
+  q20_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.20)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q20flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no','q20flood_Htf_m'))
+  
+  #Q25 flood
+  q25_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(exceed_prob - 0.25)) %>% 
+    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
+    dplyr::mutate(q25flood_Htf_m = Htf_m) %>%
+    dplyr::select(c('site_no','q25flood_Htf_m'))
+
+  forModel <- gage %>%
+    dplyr::left_join(q01_forModel, by='site_no') %>%
+    dplyr::left_join(q05_forModel, by='site_no') %>%
+    dplyr::left_join(q1_forModel, by='site_no') %>%
+    dplyr::left_join(q205_forModel, by='site_no') %>%
+    dplyr::left_join(q5_forModel, by='site_no') %>%
+    dplyr::left_join(q10_forModel, by='site_no') %>%
+    dplyr::left_join(q15_forModel, by='site_no') %>%
+    dplyr::left_join(q20_forModel, by='site_no') %>%
+    dplyr::left_join(q25_forModel, by='site_no') %>%
+    tidyr::pivot_longer(c('q01flood_Htf_m', 'q05flood_Htf_m', 'q1flood_Htf_m', 'q205flood_Htf_m', 'q5flood_Htf_m', 'q10flood_Htf_m', 'q15flood_Htf_m', 'q20flood_Htf_m', 'q25flood_Htf_m'))
+
+  #fit Htf models
+  models_r2 <- forModel %>%
+    dplyr::group_by(name) %>%
+    dplyr::mutate(broom::glance(lm(log(value) ~ log(DA_skm)))) %>%
+    dplyr::summarise(n_gages=sum(!(is.na(value))),
+                    rsq = mean(adj.r.squared, na.rm=T)) %>% #mean to pass the constant through
+    dplyr::select(c(name, n_gages, rsq))
+
+  models <- forModel %>%
+    dplyr::group_by(name) %>%
+    dplyr::group_modify(~ broom::tidy(lm(log(value) ~ log(DA_skm), data = .x))) %>%
+    dplyr::select(name:std.error) %>%
+    dplyr::left_join(models_r2, by='name') %>%
+    tidyr::pivot_wider(names_from=term, values_from=c(estimate, std.error, n_gages, rsq)) %>%
+    dplyr::select(c('name', 'estimate_(Intercept)','estimate_log(DA_skm)', 'std.error_(Intercept)', 'std.error_log(DA_skm)', 'n_gages_(Intercept)', 'rsq_(Intercept)'))
+  
+  colnames(models) <- c('name', 'coef','exp', 'stderr_coef', 'stderr_exp', 'n_gages', 'rsq')
+  
+  theme_set(theme_classic())
+  
+  plot <- ggplot(forModel, aes(x=DA_skm, y=value)) +
+    geom_point(size=5, color='#153131')+
+    geom_smooth(method='lm', se=F, color='black',linewidth=1.25) +
+    scale_x_log10()+
+    scale_y_log10() +
+    ylab(bquote(bold("Water level ["*m*"]"))) +
+    xlab(bquote(bold("Drainage Area ["*km^2*"]"))) +
+    theme(axis.title = element_text(face = 'bold', size=18),
+          axis.text = element_text(size=15),
+          plot.title = element_text(face = 'bold', size=22)) +
+    facet_wrap(~factor(name, levels=c('q01flood_Htf_m', 'q05flood_Htf_m', 'q1flood_Htf_m', 'q205flood_Htf_m', 'q5flood_Htf_m', 'q10flood_Htf_m', 'q15flood_Htf_m', 'q20flood_Htf_m', 'q25flood_Htf_m'),
+                          labels=c('0.1% flow','0.5% flow', '1% flow', '2.5% flow','5% flow', '10% flow', '15% flow','20% flow', '25% flow'))) +
+    geom_text(data = models_r2, aes(x = 10^1, y = 5, label = paste0('rsq: ',round(rsq,2))), size=6) +
+    geom_text(data = models_r2, aes(x = 10^1, y = 3.5, label = paste0(n_gages, ' gages')), size=6) +
+    theme(strip.text.x = element_text(size = 20))
+  
+  ggsave(paste0('cache/upscalingModel_ahg.png'), plot, width=12, height=12)
+  
+  return(forModel)
+}
 
 
 
@@ -948,4 +1463,18 @@ hortonScaling <- function(basinAnalysis){
   return(list('scaling_results'=scaledBasin,
               'area_model_summary'=summary(area_model),
               'vol_model_summary'=summary(vol_model)))
+}
+
+
+
+
+
+valModel <- function(basinData, basinModel){
+  shp <- st_read('data/nhd_reaches.shp')
+
+  basinModel <- basinModel %>%
+    dplyr::filter(NHDPlusID %in% shp$NHDPlusID)
+
+  #for now, the deerfield inundation map coreesponds to the "0.5%" flood, or ~90k cfs (~2550 cms)
+
 }
