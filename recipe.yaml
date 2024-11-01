@@ -1,0 +1,19 @@
+name: env-CONUS_connectivity
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - r-base
+  - r-tidyverse
+  - r-sf
+  - r-targets
+  - r-crew
+  - r-dataRetrieval
+  - r-tarchetypes
+  - r-patchwork
+  - r-lwgeom
+  - r-segmented
+  - r-remotes
+  - r-plyr
+  - r-doparallel
+prefix: /home/cbb46/.conda/envs/env-CONUS_connectivity

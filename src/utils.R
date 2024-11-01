@@ -3,9 +3,9 @@
 ## Summer 2024
 
 
-getBasinGages <- function(path_to_data, huc4id, gageRecordStart, gageRecordEnd, benchmark_index){
+getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd, benchmark_index){
   huc2 <- substr(huc4id, 1, 2)
-  huc8s <- sf::st_read(paste0(path_to_data, '/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU8.shp')) %>%
+  huc8s <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU8.shp')) %>%
     dplyr::filter(substr(huc8, 1, 4)==huc4id)
   
   
@@ -34,13 +34,15 @@ getBasinGages <- function(path_to_data, huc4id, gageRecordStart, gageRecordEnd, 
 }
 
 
+
+
+
 modelsBHG <- function(){
   dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
-    dplyr::select(c('Physiographic Division', '...9', '...13','...15')) #some necessary manual munging for colnames from dataset
+    dplyr::select(c('Physiographic Division', '...9', '...13')) #some necessary manual munging for colnames from dataset
   
-  colnames(dataset) <- c('DIVISION', 'DA_km2', 'Wb_m','Hb_m')
+  colnames(dataset) <- c('DIVISION', 'DA_km2', 'Wb_m')
   
-  dataset$Hb_m <- as.numeric(dataset$Hb_m)
   dataset$Wb_m <- as.numeric(dataset$Wb_m)
   dataset$DA_km2 <- as.numeric(dataset$DA_km2)
   
@@ -50,15 +52,8 @@ modelsBHG <- function(){
   
   #build models, grouped by physiographic region
   models <- dplyr::group_by(dataset, DIVISION) %>%
-    dplyr::do(model_Hb = lm(log10(Hb_m)~log10(DA_km2), data=.),
-              model_Wb = lm(log10(Wb_m)~log10(DA_km2), data=.)) %>% #fit models by physiographic regions
-    dplyr::summarise(a_Hb = 10^(model_Hb$coef[1]), #model intercept
-                     b_Hb = model_Hb$coef[2], #model exponent
-                     r2_Hb = summary(model_Hb)$r.squared, #model performance
-                     mean_residual_Hb = mean(model_Hb$residuals, na.rm=T),
-                     sd_residual_Hb = sd(model_Hb$residuals, na.rm=T),
-                     see_Hb = sd(model_Hb$residuals, na.rm=T),
-                     a_Wb = 10^(model_Wb$coef[1]), #model intercept
+    dplyr::do(model_Wb = lm(log10(Wb_m)~log10(DA_km2), data=.)) %>% #fit models by physiographic regions
+    dplyr::summarise(a_Wb = 10^(model_Wb$coef[1]), #model intercept
                      b_Wb = model_Wb$coef[2], #model exponent
                      r2_Wb = summary(model_Wb)$r.squared, #model performance
                      mean_residual_Wb = mean(model_Wb$residuals, na.rm=T),
@@ -75,18 +70,18 @@ modelsBHG <- function(){
 
 
 
-dataBHG <- function(){
-  dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
-    dplyr::select(c('USGS Station No.', '...11', '...15')) #some necessary manual munging for colnames from dataset
+# dataBHG <- function(){
+#   dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
+#     dplyr::select(c('USGS Station No.', '...11', '...15')) #some necessary manual munging for colnames from dataset
   
-  colnames(dataset) <- c('site_no', 'Qb_cms', 'Hb_m')
+#   colnames(dataset) <- c('site_no', 'Qb_cms', 'Hb_m')
   
-  dataset$Qb_cms <- as.numeric(dataset$Qb_cms)
+#   dataset$Qb_cms <- as.numeric(dataset$Qb_cms)
   
-  dataset <- tidyr::drop_na(dataset) #only keep those with a usgs site and a non-NA Qb value (some data didn't report Qb)
+#   dataset <- tidyr::drop_na(dataset) #only keep those with a usgs site and a non-NA Qb value (some data didn't report Qb)
   
-  return(dataset)
-}
+#   return(dataset)
+# }
 
 
 
@@ -124,12 +119,12 @@ setupMonteCarlo <- function(m,bankfullModel, variable){
 
 
 #' Note: Sf catchments are handled internally (using sql queries) because for some reason dplyr::filter won't work on these objects passed betweenn functions... ANd the sql is likely faster anyway
-buildBasinDataPackage <- function(path_to_data, huc4) {
+buildBasinDataPackage <- function(huc4) {
   huc2 <- substr(huc4, 1, 2)
   
   #setup basin shapefiles
-  dem <- terra::rast(paste0(path_to_data, '/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/elev_cm.tif')) #[cm]
-  d8 <- terra::rast(paste0(path_to_data, '/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/fdr.tif')) #[cm]
+  dem <- terra::rast(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/elev_cm.tif')) #[cm]
+  d8 <- terra::rast(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/fdr.tif')) #[cm]
 
   prelist <- list('dem'=dem,
        'd8'=d8)
@@ -138,12 +133,12 @@ buildBasinDataPackage <- function(path_to_data, huc4) {
   
   #build waterbody type lookup table
   sf::sf_use_s2(FALSE)
-  waterbodies <-  sf::st_read(paste0(path_to_data, '/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
+  waterbodies <-  sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
                               layer = 'NHDWaterbody',
                               quiet = TRUE) %>%
     sf::st_zm()
   waterbodies <- fixGeometries(waterbodies)
-  flowlines <- sf::st_read(paste0(path_to_data, '/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
+  flowlines <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
                               layer = 'NHDFlowline',
                               quiet = TRUE) %>%
     sf::st_zm()

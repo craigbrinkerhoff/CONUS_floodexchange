@@ -1,3 +1,3 @@
 library(targets)
 
-tar_make(upscalingModel_ahg_0108)
+tar_make(val_test_0108)
