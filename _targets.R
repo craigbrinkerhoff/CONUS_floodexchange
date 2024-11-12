@@ -10,6 +10,7 @@ library(ggplot2)
 library(tibble)
 
 source("src/functions_floodplain.R")
+source("src/validation.R")
 source('src/utils.R')
 
 ## usgs dem vertical accuracy: https://www.mdpi.com/2072-4292/14/4/940
@@ -34,16 +35,16 @@ gageAnalysis <- tar_map(
     huc4 = c('0108')
   ),
   names='huc4',
-  
+
   ## PREP GAGES
   tar_target(gagesBasin, method_function(huc4, gageRecordStart, gageRecordEnd)),
   tar_target(gage, prepGage(gagesBasin),
-             pattern=map(gagesBasin),
-             iteration='list'),
+            pattern=map(gagesBasin),
+            iteration='list'),
   tar_target(gageRecord, prepFlowRecord(gage, gageRecordStart, gageRecordEnd, minRecordLength),
-             pattern=map(gage),
-             iteration='list'),
-  
+            pattern=map(gage),
+            iteration='list'),
+
   ## PREP BASIN DATA
   tar_target(basinData, buildBasinDataPackage(huc4)),
 
@@ -51,24 +52,27 @@ gageAnalysis <- tar_map(
   tar_target(depthAHG, buildDepthAHG(gage, minADCPMeas),
             pattern=map(gage),
             iteration='list'),
-  
+
   ## UPSCALE TO RIVER NETWORK
-  #tar_target(upscalingModel, buildUpscalingModel_v2(huc4, gageRecord, gage, stageDepthModel, BHGmodel, gageRecordStart, gageRecordEnd)),
   tar_target(upscalingModel, buildUpscalingModel(huc4, gageRecord, gage, depthAHG, minAHGr2, gageRecordStart, gageRecordEnd)),
   tar_target(basinModel, buildNetworkModel(huc4, upscalingModel, BHGmodel, basinData)),
-  # tar_target(basinAnalysis, runNetworkModel(huc4, basinData, basinModel)),
+  tar_target(basinAnalysis, runNetworkModel(huc4, basinData, basinModel), deployment='main'),
 
   # ## HORTON SCALING TO CAPTURE INUNDATION IN STREAMS < 10M WIDE
   tar_target(hortonResults, hortonScaling(val_test)),
 
   # ## VALIDATE AT REACHES WITH USGS INUNDATION MODELS
-  tar_target(val_test, valModel(huc4, basinData, basinModel))
+  tar_target(val_USGS, valModelUSGS(huc4, basinData, basinModel)),
+  tar_target(val_FEMA, valModelFEMA(huc4, preppedFEMA, basinModel, basinAnalysis))
 )
 
 
 list(
   ## PREP BANKFULL MODELs AND DATA
   tar_target(BHGmodel, modelsBHG()),
+
+  ## PREP FEMA MAPS
+  tar_target(preppedFEMA, prepFEMA()),
   
   ## RUN GAGE ANALYSIS (STATIC BRANCHED)
   gageAnalysis

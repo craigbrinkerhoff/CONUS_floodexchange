@@ -51,16 +51,28 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
   # convert to date (workaround to handle known date class bug with midnight- https://github.com/tidyverse/lubridate/issues/1124)
   gagedata$date <- lubridate::ymd_hms(format(as.POSIXct(gagedata$dateTime), format = "%Y-%m-%d %T %Z"))
 
+  gagedata_og <- gagedata
+
   #downsample to hourly (just to be consistent and reduce volume of data)
-  gagedata <- gagedata %>%
+  gagedata <- gagedata_og %>%
     dplyr::mutate(date_hr = lubridate::ymd_h(paste0(lubridate::year(date), '-', lubridate::month(date),'-',lubridate::day(date), '-', lubridate::hour(date)))) %>%
     dplyr::group_by(date_hr) %>%
     dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
                     Q_cms = mean(Q_cms, na.rm=T))
 
+  #get max annual floods for calculating the FEMA 100yr AEP
+  gagedata_aep <- gagedata_og %>%
+  dplyr::mutate(year = lubridate::year(date)) %>%
+  dplyr::group_by(year) %>%
+  dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
+                  Q_cms = max(Q_cms, na.rm=T))
+
+  gagedata_aep$rank <- rank(-gagedata_aep$Q_cms) #annual flood data
+  gagedata_aep$exceed_prob <- (gagedata_aep$rank/(nrow(gagedata_aep) + 1))
+
   #get number of years on recordf
-  start <- lubridate::year(min(gagedata$date_hr))
-  end <- lubridate::year(max(gagedata$date_hr))
+  start <- min(gagedata_aep$year)
+  end <- max(gagedata_aep$year)
   spread <- end - start
 
   if(spread < minRecordLength){return(data.frame())}
@@ -70,12 +82,8 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
 
 
   #get exceedance probs for each flow value
-  #probs <- quantile(gagedata$Q_cms, 1 - seq(0,1,0.00001)) #calc exdeeance probs down to 0.001%
-  #names(probs) <- NULL
-  #gagedata$exceed_prob <- sapply(gagedata$Q_cms, function(x){which.min(abs(probs - x)) / length(probs)})
   gagedata$rank <- rank(-gagedata$Q_cms) #hourly flow data
-  gagedata$exceed_freq <- (gagedata$rank/(nrow(gagedata) + 1)) #exceed prob for a given hour over 'spread' years
-  gagedata$exceed_prob <- gagedata$exceed_freq * 24*365*(1/gagedata$spread) #apply to yearly timescale, i.e. exceed prob in a given year
+  gagedata$exceed_prob <- (gagedata$rank/(nrow(gagedata) + 1)) #exceed prob for a given hour over 'spread' years
 
   #grab rating table to convert to stage
   ratingTable <- tryCatch(dataRetrieval::readNWISrating(gageID, "exsa"),
@@ -91,6 +99,13 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
   #add flag if gagedata is outside of the rating table
   gagedata$ratingflag <- ifelse(gagedata$Q_cms > max(ratingTable$Q_cms) | gagedata$Q_cms < min(ratingTable$Q_cms), 1, 0)
 
+  #add fema 100 yr aep
+  fema100yrflood_cms <- gagedata_aep[which.min(abs(gagedata_aep$exceed_prob - 0.01)),]$Q_cms
+  fema100yrstage_m <- ratingTable[which.min(abs(ratingTable$Q_cms - fema100yrflood_cms)),]$stage_m
+
+  gagedata$fema100yrflood_cms <- fema100yrflood_cms
+  gagedata$fema100yrstage_m <- fema100yrstage_m
+
   return(gagedata)
 }
 
@@ -103,9 +118,9 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
   
   sql <- paste0('SELECT * FROM NHDPlusCatchment WHERE NHDPlusID = ', reachID)
   gage_unit_catchment <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
-                                     layer = 'NHDPlusCatchment',
-                                     query = sql, #sql query to only load the catchment we want efficiently (see above)
-                                     quiet = TRUE)
+                                    layer = 'NHDPlusCatchment',
+                                    query = sql, #sql query to only load the catchment we want efficiently (see above)
+                                    quiet = TRUE)
   
   gage_unit_catchment <- terra::vect(gage_unit_catchment)
   gage_unit_catchment <- terra::project(gage_unit_catchment, terra::crs(dem))
@@ -113,9 +128,9 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
   #read in the nhd centerline
   sql <- paste0('SELECT * FROM NHDFlowline WHERE NHDPlusID = ', reachID)
   flowline <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
-                                     layer = 'NHDFlowline',
-                                     query = sql, #sql query to only load the catchment we want efficiently (see above)
-                                     quiet = TRUE) %>%
+                                    layer = 'NHDFlowline',
+                                    query = sql, #sql query to only load the catchment we want efficiently (see above)
+                                    quiet = TRUE) %>%
     dplyr::filter(NHDPlusID == reachID) %>%
     sf::st_transform(crs=sf::st_crs(terra::crs(dem))) %>%
     sf::st_zm()
@@ -545,7 +560,7 @@ buildUpscalingModel <- function(huc4, gageRecord, gage, depAHG, minAHGr2, gageRe
   depAHG <- dplyr::bind_rows(depAHG)
 
   gageRecord <- dplyr::bind_rows(gageRecord) %>%
-    dplyr::select(c('site_no', 'date_hr', 'Q_cms', 'exceed_prob'))
+    dplyr::select(c('site_no', 'date_hr', 'fema100yrflood_cms', 'Q_cms', 'exceed_prob'))
   
   gage <- sf::st_drop_geometry(gage) %>% 
     dplyr::bind_rows() %>% 
@@ -564,6 +579,13 @@ buildUpscalingModel <- function(huc4, gageRecord, gage, depAHG, minAHGr2, gageRe
 
   #calculate water level, relative to channel bottom
   upscaling_df$Htf_m <- exp(upscaling_df$lm_depth_a)*upscaling_df$Q_cms^upscaling_df$lm_depth_b
+  upscaling_df$femaHtf_m <- exp(upscaling_df$lm_depth_a)*upscaling_df$fema100yrflood_cms^upscaling_df$lm_depth_b
+
+  #100yr FEMA AEP flood
+  qFEMA_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::summarise(qFEMAflood_Htf_m = dplyr::first(femaHtf_m)) %>% #it's a constant so
+    dplyr::select(c('site_no', 'qFEMAflood_Htf_m'))
 
   #Q0.1 flood
   q01_forModel <- upscaling_df %>%
@@ -572,14 +594,6 @@ buildUpscalingModel <- function(huc4, gageRecord, gage, depAHG, minAHGr2, gageRe
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
     dplyr::mutate(q01flood_Htf_m = Htf_m) %>%
     dplyr::select(c('site_no', 'q01flood_Htf_m'))
-
-  #Q0.2 flood
-  q02_forModel <- upscaling_df %>%
-    dplyr::group_by(site_no) %>%
-    dplyr::mutate(diff = abs(exceed_prob - 0.002)) %>% 
-    dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q02flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no', 'q02flood_Htf_m'))
 
   #Q1 flood
   q1_forModel <- upscaling_df %>%
@@ -638,8 +652,8 @@ buildUpscalingModel <- function(huc4, gageRecord, gage, depAHG, minAHGr2, gageRe
     dplyr::select(c('site_no','q25flood_Htf_m'))
 
   forModel <- gage %>%
+    dplyr::left_join(qFEMA_forModel, by='site_no') %>%
     dplyr::left_join(q01_forModel, by='site_no') %>%
-    dplyr::left_join(q02_forModel, by='site_no') %>%
     dplyr::left_join(q1_forModel, by='site_no') %>%
     dplyr::left_join(q205_forModel, by='site_no') %>%
     dplyr::left_join(q5_forModel, by='site_no') %>%
@@ -647,7 +661,7 @@ buildUpscalingModel <- function(huc4, gageRecord, gage, depAHG, minAHGr2, gageRe
     dplyr::left_join(q15_forModel, by='site_no') %>%
     dplyr::left_join(q20_forModel, by='site_no') %>%
     dplyr::left_join(q25_forModel, by='site_no') %>%
-    tidyr::pivot_longer(c('q01flood_Htf_m', 'q02flood_Htf_m', 'q1flood_Htf_m', 'q205flood_Htf_m', 'q5flood_Htf_m', 'q10flood_Htf_m', 'q15flood_Htf_m', 'q20flood_Htf_m', 'q25flood_Htf_m'))
+    tidyr::pivot_longer(c('qFEMAflood_Htf_m', 'q01flood_Htf_m', 'q1flood_Htf_m', 'q205flood_Htf_m', 'q5flood_Htf_m', 'q10flood_Htf_m', 'q15flood_Htf_m', 'q20flood_Htf_m', 'q25flood_Htf_m'))
 
   #fit Htf models
   models_r2 <- forModel %>%
@@ -679,8 +693,8 @@ buildUpscalingModel <- function(huc4, gageRecord, gage, depAHG, minAHGr2, gageRe
     theme(axis.title = element_text(face = 'bold', size=18),
           axis.text = element_text(size=15),
           plot.title = element_text(face = 'bold', size=22)) +
-    facet_wrap(~factor(name, levels=c('q01flood_Htf_m', 'q02flood_Htf_m', 'q1flood_Htf_m', 'q205flood_Htf_m', 'q5flood_Htf_m', 'q10flood_Htf_m', 'q15flood_Htf_m', 'q20flood_Htf_m', 'q25flood_Htf_m'),
-                          labels=c('0.1% flow','0.2% flow', '1% flow', '2.5% flow','5% flow', '10% flow', '15% flow','20% flow', '25% flow'))) +
+    facet_wrap(~factor(name, levels=c('qFEMAflood_Htf_m', 'q01flood_Htf_m', 'q1flood_Htf_m', 'q205flood_Htf_m', 'q5flood_Htf_m', 'q10flood_Htf_m', 'q15flood_Htf_m', 'q20flood_Htf_m', 'q25flood_Htf_m'),
+                          labels=c('100yr AEP flood','0.1% flow', '1% flow', '2.5% flow','5% flow', '10% flow', '15% flow','20% flow', '25% flow'))) +
     geom_text(data = models_r2, aes(x = 10^0.8, y = 5, label = paste0('rsq: ',round(rsq,2))), size=6) +
     geom_text(data = models_r2, aes(x = 10^0.8, y = 3.5, label = paste0(n_gages, ' gages')), size=6) +
     theme(strip.text.x = element_text(size = 20))
@@ -723,15 +737,15 @@ buildNetworkModel <- function(huc4, upscalingModel, BHGmodel, basinData) {
   network$Wb_m <- network$a_Wb * (network$TotDASqKm)^network$b_Wb
 
   #upscale mean flood depths by drainage area
-  network$Htf_q01_m <- exp(upscalingModel[upscalingModel$name == 'q01flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q01flood_Htf_m',]$exp
-  network$Htf_q02_m <- exp(upscalingModel[upscalingModel$name == 'q02flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q02flood_Htf_m',]$exp
-  network$Htf_q1_m <- exp(upscalingModel[upscalingModel$name == 'q1flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q1flood_Htf_m',]$exp
-  network$Htf_q205_m <- exp(upscalingModel[upscalingModel$name == 'q205flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q205flood_Htf_m',]$exp
-  network$Htf_q5_m <- exp(upscalingModel[upscalingModel$name == 'q5flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q5flood_Htf_m',]$exp
-  network$Htf_q10_m <- exp(upscalingModel[upscalingModel$name == 'q10flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q10flood_Htf_m',]$exp
-  network$Htf_q15_m <- exp(upscalingModel[upscalingModel$name == 'q15flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q15flood_Htf_m',]$exp
-  network$Htf_q20_m <- exp(upscalingModel[upscalingModel$name == 'q20flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q20flood_Htf_m',]$exp
-  network$Htf_q25_m <- exp(upscalingModel[upscalingModel$name == 'q25flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q25flood_Htf_m',]$exp
+  network$Htf_qFEMA_m <- exp(upscalingModel[upscalingModel$name == 'qFEMAflood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'qFEMAflood_Htf_m',]$exp
+  # network$Htf_q01_m <- exp(upscalingModel[upscalingModel$name == 'q01flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q01flood_Htf_m',]$exp
+  # network$Htf_q1_m <- exp(upscalingModel[upscalingModel$name == 'q1flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q1flood_Htf_m',]$exp
+  # network$Htf_q205_m <- exp(upscalingModel[upscalingModel$name == 'q205flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q205flood_Htf_m',]$exp
+  # network$Htf_q5_m <- exp(upscalingModel[upscalingModel$name == 'q5flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q5flood_Htf_m',]$exp
+  # network$Htf_q10_m <- exp(upscalingModel[upscalingModel$name == 'q10flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q10flood_Htf_m',]$exp
+  # network$Htf_q15_m <- exp(upscalingModel[upscalingModel$name == 'q15flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q15flood_Htf_m',]$exp
+  # network$Htf_q20_m <- exp(upscalingModel[upscalingModel$name == 'q20flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q20flood_Htf_m',]$exp
+  # network$Htf_q25_m <- exp(upscalingModel[upscalingModel$name == 'q25flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q25flood_Htf_m',]$exp
 
   network <- network %>%
     dplyr::filter(AreaSqKm > 0) %>%
@@ -764,16 +778,20 @@ runNetworkModel <- function(huc4, basinData, network){
   inundationWrapper <- function(reach) {
     #lower bound on dem resolution (also, these small rivers don't reallllly have floodplains, right?)
     if(reach$Wb_m <= 10 | reach$waterbody_type == 'lake'){
-      reach[,c('Af_q01_m2', 'Af_q02_m2', 'Af_q1_m2', 'Af_q205_m2','Af_q5_m2', 'Af_q10_m2', 'Af_q15_m2', 'Af_q20_m2', 'Af_q25_m2')] <-NA
-      reach[,c('Vol_q01_m3', 'Vol_q02_m3', 'Vol_q1_m3', 'Vol_q205_m3', 'Vol_q5_m3', 'Vol_q10_m3', 'Vol_q15_m3', 'Vol_q20_m3', 'Vol_q25_m3')] <- NA
+      reach[,c('Af_qFEMA_m2')] <-NA
+      reach[,c('Vol_qFEMA_m3')] <- NA
+      # reach[,c('Af_q01_m2', 'Af_q02_m2', 'Af_q1_m2', 'Af_q205_m2','Af_q5_m2', 'Af_q10_m2', 'Af_q15_m2', 'Af_q20_m2', 'Af_q25_m2')] <-NA
+      # reach[,c('Vol_q01_m3', 'Vol_q02_m3', 'Vol_q1_m3', 'Vol_q205_m3', 'Vol_q5_m3', 'Vol_q10_m3', 'Vol_q15_m3', 'Vol_q20_m3', 'Vol_q25_m3')] <- NA
       return(reach)
     }
     
     #run inundation model
     inundationDataPackage <- prepInundationData(huc4, reach$NHDPlusID, reach$Wb_m, dem, d8)
     if(inundationDataPackage$flag == 'no pour points'){
-      reach[,c('Af_q01_m2', 'Af_q02_m2', 'Af_q1_m2', 'Af_q205_m2','Af_q5_m2', 'Af_q10_m2', 'Af_q15_m2', 'Af_q20_m2', 'Af_q25_m2')] <-NA
-      reach[,c('Vol_q01_m3', 'Vol_q02_m3', 'Vol_q1_m3', 'Vol_q205_m3', 'Vol_q5_m3', 'Vol_q10_m3', 'Vol_q15_m3', 'Vol_q20_m3', 'Vol_q25_m3')] <- NA
+      reach[,c('Af_qFEMA_m2')] <-NA
+      reach[,c('Vol_qFEMA_m3')] <- NA
+      # reach[,c('Af_q01_m2', 'Af_q02_m2', 'Af_q1_m2', 'Af_q205_m2','Af_q5_m2', 'Af_q10_m2', 'Af_q15_m2', 'Af_q20_m2', 'Af_q25_m2')] <-NA
+      # reach[,c('Vol_q01_m3', 'Vol_q02_m3', 'Vol_q1_m3', 'Vol_q205_m3', 'Vol_q5_m3', 'Vol_q10_m3', 'Vol_q15_m3', 'Vol_q20_m3', 'Vol_q25_m3')] <- NA
       return(reach)
     }
 
@@ -812,8 +830,11 @@ runNetworkModel <- function(huc4, basinData, network){
     
     return(flood_vol_m3)
     }
-    reach[,c('Af_q01_m2', 'Af_q02_m2', 'Af_q1_m2', 'Af_q205_m2','Af_q5_m2', 'Af_q10_m2', 'Af_q15_m2', 'Af_q20_m2', 'Af_q25_m2')] <- lapply(reach[,c('Htf_q01_m', 'Htf_q02_m', 'Htf_q1_m', 'Htf_q205_m', 'Htf_q5_m', 'Htf_q10_m', 'Htf_q15_m', 'Htf_q20_m','Htf_q25_m')], areaWrapper)
-    reach[,c('Vol_q01_m3', 'Vol_q02_m3', 'Vol_q1_m3', 'Vol_q205_m3', 'Vol_q5_m3', 'Vol_q10_m3', 'Vol_q15_m3', 'Vol_q20_m3', 'Vol_q25_m3')] <- lapply(reach[,c('Htf_q01_m', 'Htf_q02_m', 'Htf_q1_m', 'Htf_q205_m', 'Htf_q5_m', 'Htf_q10_m', 'Htf_q15_m', 'Htf_q20_m','Htf_q25_m')], volWrapper)
+    reach[,c('Af_qFEMA_m2')] <- lapply(reach[,c('Htf_qFEMA_m')], areaWrapper)
+    reach[,c('Vol_qFEMA_m3')] <- lapply(reach[,c('Htf_qFEMA_m')], volWrapper)
+
+    # reach[,c('Af_q01_m2', 'Af_q02_m2', 'Af_q1_m2', 'Af_q205_m2','Af_q5_m2', 'Af_q10_m2', 'Af_q15_m2', 'Af_q20_m2', 'Af_q25_m2')] <- lapply(reach[,c('Htf_q01_m', 'Htf_q02_m', 'Htf_q1_m', 'Htf_q205_m', 'Htf_q5_m', 'Htf_q10_m', 'Htf_q15_m', 'Htf_q20_m','Htf_q25_m')], areaWrapper)
+    # reach[,c('Vol_q01_m3', 'Vol_q02_m3', 'Vol_q1_m3', 'Vol_q205_m3', 'Vol_q5_m3', 'Vol_q10_m3', 'Vol_q15_m3', 'Vol_q20_m3', 'Vol_q25_m3')] <- lapply(reach[,c('Htf_q01_m', 'Htf_q02_m', 'Htf_q1_m', 'Htf_q205_m', 'Htf_q5_m', 'Htf_q10_m', 'Htf_q15_m', 'Htf_q20_m','Htf_q25_m')], volWrapper)
 
     return(reach)
   }
@@ -876,20 +897,4 @@ hortonScaling <- function(basinAnalysis){
   return(list('scaling_results'=scaledBasin,
               'area_model_summary'=summary(area_model),
               'vol_model_summary'=summary(vol_model)))
-}
-
-
-
-
-
-valModel <- function(huc4, basinData, basinModel){
-  shp <- sf::st_read('data/path_to_data/CONUS_connectivity_data/deerfield_nhd_reaches.shp')
-
-  basinModel <- basinModel %>%
-    dplyr::filter(NHDPlusID %in% shp$NHDPlusID)
-
-  #dummy setup for now
-  analysis <- runNetworkModel(huc4, basinData, basinModel)
-
-  return(analysis)
 }

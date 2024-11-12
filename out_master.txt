@@ -307,17 +307,7 @@ The following objects are masked from ‘package:base’:
 ✔ skipped pattern gageRecord_0108
 ✔ skipped target upscalingModel_0108
 ✔ skipped target basinModel_0108
-▶ dispatched target val_test_0108
-Reading layer `deerfield_nhd_reaches' from data source 
-  `/gpfs/gibbs/pi/brinkerhoff/data/CONUS_connectivity_data/deerfield_nhd_reaches.shp' 
-  using driver `ESRI Shapefile'
-Simple feature collection with 122 features and 19 fields
-Geometry type: LINESTRING
-Dimension:     XYZM
-Bounding box:  xmin: -72.92621 ymin: 42.51612 xmax: -72.57744 ymax: 42.64412
-z_range:       zmin: 0 zmax: 0
-m_range:       mmin: 0 mmax: 100
-Geodetic CRS:  NAD83
+▶ dispatched target basinAnalysis_0108
 ------------------------------------------------------------------------------
 You have loaded plyr after dplyr - this is likely to cause problems.
 If you need functions from both plyr and dplyr, please load plyr first, then dplyr:
@@ -334,5 +324,12 @@ The following objects are masked from ‘package:dplyr’:
 Loading required package: foreach
 Loading required package: iterators
 Loading required package: parallel
-● completed target val_test_0108 [1.142 minutes, 147.283 kilobytes]
-▶ ended pipeline [1.509 minutes]
+● completed target basinAnalysis_0108 [32.323 minutes, 37.677 megabytes]
+▶ ended pipeline [32.755 minutes]
+Warning messages:
+1: Detected an unexpected many-to-many relationship between `x` and `y`.
+ℹ Row 724 of `x` matches multiple rows in `y`.
+ℹ Row 724 of `y` matches multiple rows in `x`.
+ℹ If a many-to-many relationship is expected, set `relationship =
+  "many-to-many"` to silence this warning. 
+2: 1 targets produced warnings. Run targets::tar_meta(fields = warnings, complete_only = TRUE) for the messages. 
