@@ -12,6 +12,7 @@ library(tibble)
 source("src/functions_floodplain.R")
 source("src/validation.R")
 source('src/utils.R')
+source('src/figures.R')
 
 ## usgs dem vertical accuracy: https://www.mdpi.com/2072-4292/14/4/940
 
@@ -59,10 +60,10 @@ gageAnalysis <- tar_map(
   tar_target(basinAnalysis, runNetworkModel(huc4, basinData, basinModel), deployment='main'),
 
   # ## HORTON SCALING TO CAPTURE INUNDATION IN STREAMS < 10M WIDE
-  tar_target(hortonResults, hortonScaling(val_test)),
+  tar_target(hortonResults, hortonScaling(basinAnalysis)),
 
   # ## VALIDATE AT REACHES WITH USGS INUNDATION MODELS
-  tar_target(val_USGS, valModelUSGS(huc4, basinData, basinModel)),
+#  tar_target(val_USGS, valModelUSGS(huc4, basinData, basinModel)),
   tar_target(val_FEMA, valModelFEMA(huc4, preppedFEMA, basinModel, basinAnalysis))
 )
 
@@ -75,5 +76,11 @@ list(
   tar_target(preppedFEMA, prepFEMA()),
   
   ## RUN GAGE ANALYSIS (STATIC BRANCHED)
-  gageAnalysis
+  gageAnalysis,
+
+  ## COMBINE
+  tar_combine(val_FEMA_combined, gageAnalysis$val_FEMA, command = dplyr::bind_rows(!!!.x)),
+
+  ## FIGURES
+  tar_target(valFEMAFig, makeValFEMA(val_FEMA_combined))
 )

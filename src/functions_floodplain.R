@@ -865,10 +865,9 @@ hortonScaling <- function(basinAnalysis){
   scaledBasin <- basinAnalysis %>%
     sf::st_drop_geometry() %>%
     dplyr::filter(StreamCalc > 0)  %>%  #RERUN WHOLE ANALYSIS WITH THIS REMOVED
-    #dplyr::mutate(Af_q1_m2 = Af_q1_m2 + (Wb_m * LengthKM * 1000)) %>% #add in channel masks to compare against inundation maps
     dplyr::group_by(StreamCalc) %>% 
-    dplyr::summarise(Af_by_order = sum(Af_q1_m2, na.rm=T),
-                    Vol_by_order = sum(Vol_q1_m3, na.rm=T),
+    dplyr::summarise(Af_by_order = sum(Af_qFEMA_m2, na.rm=T),
+                    Vol_by_order = sum(Vol_qFEMA_m3, na.rm=T),
                     frac = round((sum(Wb_m > 10, na.rm=T)/n()),2),
                     lengthKM_by_order = sum(LengthKM, na.rm=T)) %>%
     dplyr::mutate(frac = ifelse(frac == 0, NA, frac))

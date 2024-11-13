@@ -53,6 +53,8 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinModel, basinAnalysis){
 
     #prep
     huc2 <- substr(huc4id, 1, 2)
+    huc8s <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU8.shp')) %>%
+        dplyr::select(c('huc8'))
 
     #read in huc4 basin
     unit_catchments <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'),
@@ -82,16 +84,25 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinModel, basinAnalysis){
     #remove catchments with narrow rivers from fema_shps (then calcualate inundated area)   
     unit_catchments <- unit_catchments %>%
         dplyr::filter(NHDPlusID %in% basinAnalysis$NHDPlusID)
+    
+    basinAnalysis <- basinAnalysis %>%
+        sf::st_join(huc8s, join=sf::st_intersection, largest=TRUE) %>%
+        dplyr::group_by(huc8) %>%
+        dplyr::summarise(A_qFEMA_km2 = 1e-6 * sum(A_qFEMA_m2, na.rm=T))
 
     fema_shp <- fema_shp %>%
         sf::st_intersection(unit_catchments) %>%
-        dplyr::mutate(A_femaAEP_m2 = sf::st_area(.))
+        dplyr::mutate(A_femaAEP_m2 = sf::st_area(.)) %>%
+        sf::st_join(huc8s, join=sf::st_overlaps, largest=TRUE) %>%
+        dplyr::group_by(huc8) %>%
+        dplyr::summarise(A_femaAEP_km2 = 1e-6 * sum(as.numeric(A_femaAEP_m2), na.rm=T)) %>%
+        dplyr::select(c('huc8', 'A_femaAEP_km2'))
 
     #build validation table
-    out <- data.frame('huc4'=huc4id,
-                    'n_catchments'=nrow(basinAnalysis),
-                    'A_qFEMA_km2'=1e-6 * sum(as.numeric(basinAnalysis$A_qFEMA_m2), na.rm=T),
-                    'A_femaAEP_km2'=1e-6 * sum(as.numeric(fema_shp$A_femaAEP_m2), na.rm=T))
+    out <- data.frame('huc8'=basinAnalysis$huc8,
+                    'A_qFEMA_km2'=basinAnalysis$A_qFEMA_km2)
+    out <- out %>%
+        dplyr::left_join(fema_shp, by='huc8')
     
     return(out)
 }
