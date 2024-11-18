@@ -48,13 +48,13 @@ prepFEMA <- function(){
 
 
 
-valModelFEMA <- function(huc4id, preppedFEMA, basinModel, basinAnalysis){
+valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis){
     sf::sf_use_s2(FALSE)
 
     #prep
     huc2 <- substr(huc4id, 1, 2)
-    huc8s <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU8.shp')) %>%
-        dplyr::select(c('huc8'))
+    # huc8s <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU8.shp')) %>%
+    #     dplyr::select(c('huc8'))
 
     #read in huc4 basin
     unit_catchments <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'),
@@ -65,44 +65,49 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinModel, basinAnalysis){
     basin <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU4.shp')) %>%
         dplyr::filter(huc4 == huc4id)
 
+    #to speed up below calculations
     fema_shp <- preppedFEMA %>%
         sf::st_filter(basin)
 
-    #only keep unit catchments that overlap the fema maps
-    catch_keep <- unit_catchments %>%
-        sf::st_intersects(fema_shp)
+    #filter model for 100-yr AEP and reaches with modeled results (non-NA)
+    basinAnalysis <- basinAnalysis %>%
+        dplyr::filter(!(is.na(A_qFEMA_m2))) %>%
+        dplyr::select(c('NHDPlusID', 'GageID', 'StreamCalc', 'A_qFEMA_m2'))
+    
+    #only keep model reaches that align with the fema maps
+    catch_keep <- fema_shp %>%
+        sf::st_intersects(basinAnalysis)
     catch_keep <- unique(unlist(catch_keep))
 
     basinAnalysis <- basinAnalysis[catch_keep,]
-
-    #filter model for 100-yr AEP and reaches in FEMA map
-    basinAnalysis <- basinAnalysis %>%
-        dplyr::filter(!(is.na(Af_qFEMA_m2))) %>%
-        dplyr::mutate(A_qFEMA_m2 = Af_qFEMA_m2 + (Wb_m*LengthKM*1000)) %>% #add the channel area back into the estimate (for validation)
-        dplyr::select(c('NHDPlusID', 'GageID', 'StreamCalc', 'A_qFEMA_m2'))
     
     #remove catchments with narrow rivers from fema_shps (then calcualate inundated area)   
     unit_catchments <- unit_catchments %>%
         dplyr::filter(NHDPlusID %in% basinAnalysis$NHDPlusID)
     
-    basinAnalysis <- basinAnalysis %>%
-        sf::st_join(huc8s, join=sf::st_intersection, largest=TRUE) %>%
-        dplyr::group_by(huc8) %>%
-        dplyr::summarise(A_qFEMA_km2 = 1e-6 * sum(A_qFEMA_m2, na.rm=T))
+    basinAnalysis <- basinAnalysis %>% #unit_catchments %>%
+    #    sf::st_join(huc8s, join=sf::st_intersects, largest=TRUE) %>% #if in multiple huc8s, assign to the one it's mostly in (this should handle just a few edge cases)
+        dplyr::group_by(NHDPlusID) %>%
+        dplyr::summarise(A_qFEMA_m2 = sum(A_qFEMA_m2, na.rm=T))
 
     fema_shp <- fema_shp %>%
-        sf::st_intersection(unit_catchments) %>%
+        sf::st_intersection(unit_catchments) %>%  #make sure fema polygons don't align with this subset of modeled catchments. It's unfair to include FEMA maps outside of the subset of our model with predictions (that overlaps FEMA) and its unfair to include FEMA maps that extend beyond our catchment scheme
+        sf::st_transform('+proj=aea +lat_0=23 +lon_0=-96 +lat_1=29.5 +lat_2=45.5 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs +type=crs') %>% #equal area projection to match model
         dplyr::mutate(A_femaAEP_m2 = sf::st_area(.)) %>%
-        sf::st_join(huc8s, join=sf::st_overlaps, largest=TRUE) %>%
-        dplyr::group_by(huc8) %>%
+      #  sf::st_transform(sf::st_crs(huc8s)) %>% #put back for spatial join
+      #  sf::st_join(huc8s, join=sf::st_intersects, largest=TRUE) %>%
+        dplyr::group_by(NHDPlusID) %>%
         dplyr::summarise(A_femaAEP_km2 = 1e-6 * sum(as.numeric(A_femaAEP_m2), na.rm=T)) %>%
-        dplyr::select(c('huc8', 'A_femaAEP_km2'))
+        dplyr::select(c('NHDPlusID', 'A_femaAEP_km2'))
 
     #build validation table
-    out <- data.frame('huc8'=basinAnalysis$huc8,
-                    'A_qFEMA_km2'=basinAnalysis$A_qFEMA_km2)
+    out <- data.frame('huc4'=huc4id,
+                    'NHDPlusID'=basinAnalysis$NHDPlusID,
+                    'A_qFEMA_km2'=basinAnalysis$A_qFEMA_m2*1e-6)
+
     out <- out %>%
-        dplyr::left_join(fema_shp, by='huc8')
+        dplyr::left_join(fema_shp, by='NHDPlusID') %>%
+        tidyr::drop_na() #a few edge cases where  fema shp is 0 km2, but just brushes against model catchment and intersects --> NA fema area. SO remove them.
     
     return(out)
 }

@@ -39,11 +39,12 @@ getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd, benchmark_inde
 
 modelsBHG <- function(){
   dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
-    dplyr::select(c('Physiographic Division', '...9', '...13')) #some necessary manual munging for colnames from dataset
+    dplyr::select(c('Physiographic Division', '...9', '...11','...13')) #some necessary manual munging for colnames from dataset
   
-  colnames(dataset) <- c('DIVISION', 'DA_km2', 'Wb_m')
+  colnames(dataset) <- c('DIVISION', 'DA_km2', 'Qb_cms','Wb_m')
   
   dataset$Wb_m <- as.numeric(dataset$Wb_m)
+  dataset$Qb_cms <- as.numeric(dataset$Qb_cms)
   dataset$DA_km2 <- as.numeric(dataset$DA_km2)
   
   dataset <- tidyr::drop_na(dataset)
@@ -52,13 +53,17 @@ modelsBHG <- function(){
   
   #build models, grouped by physiographic region
   models <- dplyr::group_by(dataset, DIVISION) %>%
-    dplyr::do(model_Wb = lm(log10(Wb_m)~log10(DA_km2), data=.)) %>% #fit models by physiographic regions
+    dplyr::do(model_Wb = lm(log10(Wb_m)~log10(DA_km2), data=.),
+              model_Qb = lm(log10(Qb_cms)~log10(DA_km2), data=.)) %>% #fit models by physiographic regions
     dplyr::summarise(a_Wb = 10^(model_Wb$coef[1]), #model intercept
                      b_Wb = model_Wb$coef[2], #model exponent
                      r2_Wb = summary(model_Wb)$r.squared, #model performance
                      mean_residual_Wb = mean(model_Wb$residuals, na.rm=T),
                      sd_residual_Wb = sd(model_Wb$residuals, na.rm=T),
-                     see_Wb = sd(model_Wb$residuals, na.rm=T)) %>%
+                     see_Wb = sd(model_Wb$residuals, na.rm=T),
+                     a_Qb = 10^(model_Qb$coef[1]),
+                     b_Qb = model_Qb$coef[2],
+                     r2_Qb = summary(model_Qb)$r.squared) %>%
     dplyr::mutate(division = division)
   
   
@@ -101,20 +106,20 @@ fixGeometries <- function(rivnet){
 
 
 
-setupMonteCarlo <- function(m,bankfullModel, variable){
-  set.seed(654)
+# setupMonteCarlo <- function(m,bankfullModel, variable){
+#   set.seed(654)
   
-  if(variable == 'justone'){
-    out <- rnorm(1000,bankfullModel$bankfull_stage_mu_m, bankfullModel$bankfull_stage_se_m)
-    out <- mean(out) #no MC, just take the median of the simulated distribution 
-  }
-  else{ #normal MC
-    out <- rnorm(m,bankfullModel$bankfull_stage_mu_m, bankfullModel$bankfull_stage_se_m)
-  }
+#   if(variable == 'justone'){
+#     out <- rnorm(1000,bankfullModel$bankfull_stage_mu_m, bankfullModel$bankfull_stage_se_m)
+#     out <- mean(out) #no MC, just take the median of the simulated distribution 
+#   }
+#   else{ #normal MC
+#     out <- rnorm(m,bankfullModel$bankfull_stage_mu_m, bankfullModel$bankfull_stage_se_m)
+#   }
   
-  return(list('stage_m'=out,
-              'depth_m'=bankfullModel$bankfull_depth_mu_m))
-}
+#   return(list('stage_m'=out,
+#               'depth_m'=bankfullModel$bankfull_depth_mu_m))
+# }
 
 
 

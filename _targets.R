@@ -55,8 +55,8 @@ gageAnalysis <- tar_map(
             iteration='list'),
 
   ## UPSCALE TO RIVER NETWORK
-  tar_target(upscalingModel, buildUpscalingModel(huc4, gageRecord, gage, depthAHG, minAHGr2, gageRecordStart, gageRecordEnd)),
-  tar_target(basinModel, buildNetworkModel(huc4, upscalingModel, BHGmodel, basinData)),
+  tar_target(upscalingModel, buildUpscalingModel(huc4, gageRecord, gage, BHGmodel, depthAHG, minAHGr2, gageRecordStart, gageRecordEnd)),
+  tar_target(basinModel, buildNetworkModel(huc4, upscalingModel, BHGmodel, basinData), deployment='main'),
   tar_target(basinAnalysis, runNetworkModel(huc4, basinData, basinModel), deployment='main'),
 
   # ## HORTON SCALING TO CAPTURE INUNDATION IN STREAMS < 10M WIDE
@@ -64,7 +64,7 @@ gageAnalysis <- tar_map(
 
   # ## VALIDATE AT REACHES WITH USGS INUNDATION MODELS
 #  tar_target(val_USGS, valModelUSGS(huc4, basinData, basinModel)),
-  tar_target(val_FEMA, valModelFEMA(huc4, preppedFEMA, basinModel, basinAnalysis))
+  tar_target(val_FEMA, valModelFEMA(huc4, preppedFEMA, basinAnalysis))
 )
 
 
