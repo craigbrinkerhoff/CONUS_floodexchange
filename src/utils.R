@@ -75,18 +75,18 @@ modelsBHG <- function(){
 
 
 
-# dataBHG <- function(){
-#   dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
-#     dplyr::select(c('USGS Station No.', '...11', '...15')) #some necessary manual munging for colnames from dataset
+dataBHG <- function(){
+  dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
+    dplyr::select(c('USGS Station No.', '...13')) #some necessary manual munging for colnames from dataset
   
-#   colnames(dataset) <- c('site_no', 'Qb_cms', 'Hb_m')
+  colnames(dataset) <- c('GageID', 'Wb_m_obs')
   
-#   dataset$Qb_cms <- as.numeric(dataset$Qb_cms)
+  dataset$Wb_m_obs <- as.numeric(dataset$Wb_m_obs)
   
-#   dataset <- tidyr::drop_na(dataset) #only keep those with a usgs site and a non-NA Qb value (some data didn't report Qb)
+  dataset <- tidyr::drop_na(dataset) #only keep those with a usgs site and a non-NA Qb value (some data didn't report Qb)
   
-#   return(dataset)
-# }
+  return(dataset)
+}
 
 
 

@@ -306,28 +306,7 @@ The following objects are masked from ‘package:base’:
 ✔ skipped branch gageRecord_0108_b134f278cd065712
 ✔ skipped pattern gageRecord_0108
 ✔ skipped target upscalingModel_0108
-▶ dispatched target basinModel_0108
-Reading layer `WBDHU4' from data source 
-  `/gpfs/gibbs/pi/brinkerhoff/data/CONUS_ephemeral_data/HUC2_01/WBD_01_HU2_Shape/Shape/WBDHU4.shp' 
-  using driver `ESRI Shapefile'
-Simple feature collection with 10 features and 15 fields
-Geometry type: MULTIPOLYGON
-Dimension:     XY
-Bounding box:  xmin: -73.73798 ymin: 40.9391 xmax: -66.01875 ymax: 48.09971
-Geodetic CRS:  NAD83
-Spherical geometry (s2) switched off
-Reading layer `physio' from data source 
-  `/gpfs/gibbs/pi/brinkerhoff/repos/CONUS_connectivity/data/physio.shp' 
-  using driver `ESRI Shapefile'
-Simple feature collection with 501 features and 10 fields
-Geometry type: POLYGON
-Dimension:     XY
-Bounding box:  xmin: -124.7339 ymin: 24.54724 xmax: -66.95722 ymax: 49.37173
-Geodetic CRS:  NAD83
-although coordinates are longitude/latitude, st_intersection assumes that they
-are planar
-Linking to GEOS 3.12.2, GDAL 3.9.2, PROJ 9.5.0; sf_use_s2() is FALSE
-● completed target basinModel_0108 [11.005 seconds, 37.536 megabytes]
+✔ skipped target basinModel_0108
 ▶ dispatched target basinAnalysis_0108
 ------------------------------------------------------------------------------
 You have loaded plyr after dplyr - this is likely to cause problems.
@@ -345,13 +324,12 @@ The following objects are masked from ‘package:dplyr’:
 Loading required package: foreach
 Loading required package: iterators
 Loading required package: parallel
-● completed target basinAnalysis_0108 [34.304 minutes, 37.692 megabytes]
-▶ ended pipeline [34.987 minutes]
+● completed target basinAnalysis_0108 [45.564 minutes, 42.054 megabytes]
+▶ ended pipeline [45.948 minutes]
 Warning messages:
-1: attribute variables are assumed to be spatially constant throughout all geometries 
-2: Detected an unexpected many-to-many relationship between `x` and `y`.
+1: Detected an unexpected many-to-many relationship between `x` and `y`.
 ℹ Row 724 of `x` matches multiple rows in `y`.
 ℹ Row 724 of `y` matches multiple rows in `x`.
 ℹ If a many-to-many relationship is expected, set `relationship =
   "many-to-many"` to silence this warning. 
-3: 2 targets produced warnings. Run targets::tar_meta(fields = warnings, complete_only = TRUE) for the messages. 
+2: 1 targets produced warnings. Run targets::tar_meta(fields = warnings, complete_only = TRUE) for the messages. 

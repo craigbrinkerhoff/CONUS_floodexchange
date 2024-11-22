@@ -72,14 +72,22 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis){
     #filter model for 100-yr AEP and reaches with modeled results (non-NA)
     basinAnalysis <- basinAnalysis %>%
         dplyr::filter(!(is.na(A_qFEMA_m2))) %>%
-        dplyr::select(c('NHDPlusID', 'GageID', 'StreamCalc', 'A_qFEMA_m2'))
+        dplyr::select(c('NHDPlusID', 'GageID', 'Wb_m', 'LengthKM', 'A_qFEMA_m2'))
     
     #only keep model reaches that align with the fema maps
-    catch_keep <- fema_shp %>%
-        sf::st_intersects(basinAnalysis)
-    catch_keep <- unique(unlist(catch_keep))
+    # catch_keep <- fema_shp %>%
+    #     sf::st_intersects(basinAnalysis)
+    # catch_keep <- unique(unlist(catch_keep))
 
-    basinAnalysis <- basinAnalysis[catch_keep,]
+    # basinAnalysis <- basinAnalysis[catch_keep,]
+    basinAnalysis <- basinAnalysis %>%
+        sf::st_filter(fema_shp, .predicate = sf::st_within) #Only keep model reaches that fall within the fema maps. FEMA maps are inconsistent in space, so we can really only validate in places where we know the entire model reach has been mapped by FEMA (to avoid conflating real false positives with incomplete FEMA maps)
+
+    #keep gage IDs for later
+    gageLookup <- basinAnalysis %>%
+        sf::st_drop_geometry() %>%
+        dplyr::group_by(NHDPlusID) %>%
+        dplyr::summarise(GageID = dplyr::first(GageID)) #just pass through
     
     #remove catchments with narrow rivers from fema_shps (then calcualate inundated area)   
     unit_catchments <- unit_catchments %>%
@@ -87,8 +95,11 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis){
     
     basinAnalysis <- basinAnalysis %>% #unit_catchments %>%
     #    sf::st_join(huc8s, join=sf::st_intersects, largest=TRUE) %>% #if in multiple huc8s, assign to the one it's mostly in (this should handle just a few edge cases)
+        sf::st_drop_geometry() %>%
         dplyr::group_by(NHDPlusID) %>%
-        dplyr::summarise(A_qFEMA_m2 = sum(A_qFEMA_m2, na.rm=T))
+        dplyr::summarise(A_qFEMA_m2 = sum(A_qFEMA_m2, na.rm=T),
+                        channel_area_km2=mean(((Wb_m/1000)*LengthKM)), #mean to pass through groupby
+                        LengthKM = mean(LengthKM)) #mean to pass through groupby
 
     fema_shp <- fema_shp %>%
         sf::st_intersection(unit_catchments) %>%  #make sure fema polygons don't align with this subset of modeled catchments. It's unfair to include FEMA maps outside of the subset of our model with predictions (that overlaps FEMA) and its unfair to include FEMA maps that extend beyond our catchment scheme
@@ -103,11 +114,15 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis){
     #build validation table
     out <- data.frame('huc4'=huc4id,
                     'NHDPlusID'=basinAnalysis$NHDPlusID,
-                    'A_qFEMA_km2'=basinAnalysis$A_qFEMA_m2*1e-6)
+                    'A_qFEMA_km2'=basinAnalysis$A_qFEMA_m2*1e-6,
+                    'channel_area_km2'=basinAnalysis$channel_area_km2,
+                    'LengthKM'=basinAnalysis$LengthKM)
 
     out <- out %>%
         dplyr::left_join(fema_shp, by='NHDPlusID') %>%
-        tidyr::drop_na() #a few edge cases where  fema shp is 0 km2, but just brushes against model catchment and intersects --> NA fema area. SO remove them.
+        dplyr::left_join(gageLookup, by='NHDPlusID') %>%
+        dplyr::relocate(GageID, .after=NHDPlusID) %>%
+        tidyr::drop_na(A_femaAEP_km2) #a few edge cases where  fema shp is 0 km2, but just brushes against model catchment and intersects --> NA fema area. SO remove them.
     
     return(out)
 }

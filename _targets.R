@@ -60,16 +60,20 @@ gageAnalysis <- tar_map(
   tar_target(basinAnalysis, runNetworkModel(huc4, basinData, basinModel), deployment='main'),
 
   # ## HORTON SCALING TO CAPTURE INUNDATION IN STREAMS < 10M WIDE
-  tar_target(hortonResults, hortonScaling(basinAnalysis)),
+  tar_target(hortonResults, hortonScaling(basinAnalysis, huc4)),
 
   # ## VALIDATE AT REACHES WITH USGS INUNDATION MODELS
 #  tar_target(val_USGS, valModelUSGS(huc4, basinData, basinModel)),
-  tar_target(val_FEMA, valModelFEMA(huc4, preppedFEMA, basinAnalysis))
+  tar_target(val_FEMA, valModelFEMA(huc4, preppedFEMA, basinAnalysis)),
+
+  ## BASIN SPECIFIC FIGURES
+  tar_target(upscalingPlot, upscalingFig(upscalingModel, huc4))
 )
 
 
 list(
   ## PREP BANKFULL MODELs AND DATA
+  tar_target(BHGdata, dataBHG()),
   tar_target(BHGmodel, modelsBHG()),
 
   ## PREP FEMA MAPS
@@ -80,7 +84,8 @@ list(
 
   ## COMBINE
   tar_combine(val_FEMA_combined, gageAnalysis$val_FEMA, command = dplyr::bind_rows(!!!.x)),
+  tar_combine(hortonResults_combined, gageAnalysis$hortonResults, command = dplyr::bind_rows(!!!.x)),
 
   ## FIGURES
-  tar_target(valFEMAFig, makeValFEMA(val_FEMA_combined))
+  tar_target(valFEMAFig, makeValFEMA(val_FEMA_combined, BHGdata))
 )
