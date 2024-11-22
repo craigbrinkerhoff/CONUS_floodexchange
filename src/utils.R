@@ -77,11 +77,12 @@ modelsBHG <- function(){
 
 dataBHG <- function(){
   dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
-    dplyr::select(c('USGS Station No.', '...13')) #some necessary manual munging for colnames from dataset
+    dplyr::select(c('USGS Station No.', 'Physiographic Division', '...9', '...13')) #some necessary manual munging for colnames from dataset
   
-  colnames(dataset) <- c('GageID', 'Wb_m_obs')
+  colnames(dataset) <- c('GageID', 'DIVISION', 'DA_gage_skm','Wb_m_obs')
   
   dataset$Wb_m_obs <- as.numeric(dataset$Wb_m_obs)
+  dataset$DA_gage_skm <- as.numeric(dataset$DA_gage_skm)
   
   dataset <- tidyr::drop_na(dataset) #only keep those with a usgs site and a non-NA Qb value (some data didn't report Qb)
   

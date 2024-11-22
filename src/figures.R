@@ -2,7 +2,7 @@
 ## Craig Brinkerhoff
 ## Winter 2024
 
-makeValFEMA <- function(val_FEMA_combined, BHGdata){
+makeValFEMA <- function(val_FEMA_combined, gage_combined, BHGdata){
     library(ggplot2)
     theme_set(theme_classic())
 
@@ -14,14 +14,34 @@ makeValFEMA <- function(val_FEMA_combined, BHGdata){
     #make floodplain only val df
     val_FEMA_floodplain <- val_FEMA_combined %>%
         dplyr::left_join(BHGdata, by='GageID') %>%
+        dplyr::left_join(gage_combined, by=c('GageID'='site_no')) %>%
         dplyr::filter(!(is.na(Wb_m_obs))) %>%
-        dplyr::mutate(channel_area_obs_km2 = (Wb_m_obs/1000) * LengthKM) %>%
+        dplyr::mutate(physio_region = stringr::str_to_title(physio_region))
+
+    #refit Wb equations while witholding the sites we can validate (WB obs)
+    Wb_model_val <- BHGdata %>%
+        dplyr::filter(!(GageID %in% val_FEMA_floodplain$GageID)) %>%
+        dplyr::group_by(DIVISION) %>%
+        dplyr::do(model_Wb = lm(log10(Wb_m_obs)~log10(DA_gage_skm), data=.)) %>%
+        dplyr::mutate(a_Wb = 10^(model_Wb$coef[1]), #model intercept
+                    b_Wb = model_Wb$coef[2], #model exponent
+                    r2_Wb = summary(model_Wb)$r.squared) #model performance
+
+    Wb_model_val[Wb_model_val$DIVISION == "Intermontane Plateau",]$DIVISION <- "Intermontane Plateaus" #make sure names line up
+
+    val_FEMA_floodplain$a_valmodel_Wb <- sapply(val_FEMA_floodplain$physio_region, function(x){return(Wb_model_val[Wb_model_val$DIVISION == x,]$a_Wb)})
+    val_FEMA_floodplain$b_valmodel_Wb <- sapply(val_FEMA_floodplain$physio_region, function(x){return(Wb_model_val[Wb_model_val$DIVISION == x,]$b_Wb)})
+    val_FEMA_floodplain$Wb_valmodel_m <- val_FEMA_floodplain$a_valmodel_Wb * (val_FEMA_floodplain$DA_gage_skm)^val_FEMA_floodplain$b_valmodel_Wb
+
+    val_FEMA_floodplain <- val_FEMA_floodplain %>%
+        dplyr::mutate(channel_area_obs_km2 = (Wb_m_obs/1000) * LengthKM,
+                    channel_area_valmodel_km2 = (Wb_valmodel_m/1000) * LengthKM) %>%
         dplyr::mutate(Af_femaAEP_km2 = A_femaAEP_km2 - channel_area_obs_km2,
-            Af_qFEMA_km2 = A_qFEMA_km2 - channel_area_km2) %>%
-        dplyr::filter(Af_femaAEP_km2 > 0 & Af_qFEMA_km2 > 0)
+                    Af_qFEMA_valmodel_km2 = A_qFEMA_km2 - channel_area_valmodel_km2) %>%
+        dplyr::filter(Af_femaAEP_km2 > 0 & Af_qFEMA_valmodel_km2 > 0)
 
     lm_inn <- lm(log(A_qFEMA_km2)~log(A_femaAEP_km2), data=val_FEMA_combined)
-    lm_flood <- lm(log(Af_qFEMA_km2)~log(Af_femaAEP_km2), data=val_FEMA_floodplain)
+    lm_flood <- lm(log(Af_qFEMA_valmodel_km2)~log(Af_femaAEP_km2), data=val_FEMA_floodplain)
 
     scatter_inn <- ggplot(val_FEMA_combined, aes(x=A_femaAEP_km2*1e6, y=A_qFEMA_km2*1e6, color=huc4))+
         geom_point(size=6, alpha=0.2) +
@@ -41,7 +61,7 @@ makeValFEMA <- function(val_FEMA_combined, BHGdata){
         annotate("text", x = 1e6, y = 10^1, label = bquote(r^2*': '*.(round(summary(lm_inn)$r.squared,2))), size=6)
     
 
-    scatter_flood <- ggplot(val_FEMA_floodplain, aes(x=Af_femaAEP_km2*1e6, y=Af_qFEMA_km2*1e6, color=huc4))+
+    scatter_flood <- ggplot(val_FEMA_floodplain, aes(x=Af_femaAEP_km2*1e6, y=Af_qFEMA_valmodel_km2*1e6, color=huc4))+
         geom_point(size=6) +
         geom_abline(linewidth=2, color='darkgrey', linetype='dashed') +
         scale_color_brewer(palette='Dark2')+

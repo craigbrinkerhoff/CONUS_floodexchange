@@ -83,9 +83,10 @@ list(
   gageAnalysis,
 
   ## COMBINE
+  tar_combine(gage_combined, gageAnalysis$gage, command = dplyr::bind_rows(!!!sf::st_drop_geometry(.x))),
   tar_combine(val_FEMA_combined, gageAnalysis$val_FEMA, command = dplyr::bind_rows(!!!.x)),
   tar_combine(hortonResults_combined, gageAnalysis$hortonResults, command = dplyr::bind_rows(!!!.x)),
 
   ## FIGURES
-  tar_target(valFEMAFig, makeValFEMA(val_FEMA_combined, BHGdata))
+  tar_target(valFEMAFig, makeValFEMA(val_FEMA_combined, gage_combined, BHGdata))
 )
