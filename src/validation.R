@@ -26,6 +26,7 @@ prepFEMA <- function(){
     states <- list.files('data/path_to_data/CONUS_connectivity_data/CONUS_FEMA')
 
     fema_shp <- data.frame()
+    fema_elev_shp <- data.frame()
     for(i in states){
         geodatabase <- list.files(paste0('data/path_to_data/CONUS_connectivity_data/CONUS_FEMA/', i), pattern = "\\.gdb$")
         
@@ -37,10 +38,19 @@ prepFEMA <- function(){
             dplyr::mutate(STATE = i) %>%
             dplyr::select(c('FLD_AR_ID', 'STATE', 'FLD_ZONE'))
         
+        #grab 100yr flood wse
+        fema_elev <- sf::st_read(paste0('data/path_to_data/CONUS_connectivity_data/CONUS_FEMA/', i, '/', geodatabase),
+                                    layer = 'S_BFE',
+                                    quiet = TRUE) %>%
+            dplyr::mutate(elev_m = ELEV * 0.3048) %>% #ft to m
+            dplyr::select(c('BFE_LN_ID', 'elev_m'))
+        
         fema_shp <- rbind(fema_shp, fema_temp)
+        fema_elev_shp <- rbind(fema_elev_shp, fema_elev)
     }
 
-    return(fema_shp)
+    return(list('fema_shp'=fema_shp,
+                'fema_elev_shp'=fema_elev_shp))
 }
 
 
@@ -48,8 +58,13 @@ prepFEMA <- function(){
 
 
 
-valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis){
+
+valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis, basinData){
     sf::sf_use_s2(FALSE)
+    
+    preppedFEMA_depths <- preppedFEMA$fema_elev_shp
+    preppedFEMA <- preppedFEMA$fema_shp
+    dem <- terra::unwrap(basinData$terra$dem) #[cm] need to unwrap the packed terra package (for distributed computing)
 
     #prep
     huc2 <- substr(huc4id, 1, 2)
@@ -72,14 +87,9 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis){
     #filter model for 100-yr AEP and reaches with modeled results (non-NA)
     basinAnalysis <- basinAnalysis %>%
         dplyr::filter(!(is.na(A_qFEMA_m2))) %>%
-        dplyr::select(c('NHDPlusID', 'GageID', 'Wb_m', 'LengthKM', 'A_qFEMA_m2'))
+        dplyr::select(c('NHDPlusID', 'GageID', 'Wb_m', 'LengthKM', 'A_qFEMA_m2', 'V_qFEMA_m2', 'Htf_qFEMA_m'))
     
     #only keep model reaches that align with the fema maps
-    # catch_keep <- fema_shp %>%
-    #     sf::st_intersects(basinAnalysis)
-    # catch_keep <- unique(unlist(catch_keep))
-
-    # basinAnalysis <- basinAnalysis[catch_keep,]
     basinAnalysis <- basinAnalysis %>%
         sf::st_filter(fema_shp, .predicate = sf::st_within) #Only keep model reaches that fall within the fema maps. FEMA maps are inconsistent in space, so we can really only validate in places where we know the entire model reach has been mapped by FEMA (to avoid conflating real false positives with incomplete FEMA maps)
 
@@ -98,6 +108,8 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis){
         sf::st_drop_geometry() %>%
         dplyr::group_by(NHDPlusID) %>%
         dplyr::summarise(A_qFEMA_m2 = sum(A_qFEMA_m2, na.rm=T),
+                        V_qFEMA_m3 = sum(V_qFEMA_m2, na.rm=T),
+                        Htf_qFEMA_m = mean(Htf_qFEMA_m, na.rm=T),
                         channel_area_km2=mean(((Wb_m/1000)*LengthKM)), #mean to pass through groupby
                         LengthKM = mean(LengthKM)) #mean to pass through groupby
 
@@ -111,10 +123,22 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis){
         dplyr::summarise(A_femaAEP_km2 = 1e-6 * sum(as.numeric(A_femaAEP_m2), na.rm=T)) %>%
         dplyr::select(c('NHDPlusID', 'A_femaAEP_km2'))
 
+    #get average fema ground elevation by nhd catchment
+    fema_terra <- terra::vect(preppedFEMA_depths)
+    ground_evals <- terra::extract(dem, fema_terra, fun=min) #thalweg elevation
+    preppedFEMA_depths$groundElevLookup_m <- ground_evals$elev_cm * 0.01 #[cm to m]
+
+    preppedFEMA_depths <- unit_catchments %>%
+        sf::st_join(preppedFEMA_depths, join=sf::st_intersects) %>%
+        sf::st_drop_geometry() %>%
+        dplyr::left_join(basinAnalysis, by='NHDPlusID') %>%
+        dplyr::select(c('NHDPlusID', 'elev_m', 'groundElevLookup_m', 'Htf_qFEMA_m'))
+
     #build validation table
     out <- data.frame('huc4'=huc4id,
                     'NHDPlusID'=basinAnalysis$NHDPlusID,
                     'A_qFEMA_km2'=basinAnalysis$A_qFEMA_m2*1e-6,
+                    'V_qFEMA_km3'=basinAnalysis$V_qFEMA_m3*1e-9,
                     'channel_area_km2'=basinAnalysis$channel_area_km2,
                     'LengthKM'=basinAnalysis$LengthKM)
 
@@ -124,5 +148,6 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis){
         dplyr::relocate(GageID, .after=NHDPlusID) %>%
         tidyr::drop_na(A_femaAEP_km2) #a few edge cases where  fema shp is 0 km2, but just brushes against model catchment and intersects --> NA fema area. SO remove them.
     
-    return(out)
+    return(list('for_area'=out,
+                'for_depth'=preppedFEMA_depths))
 }
