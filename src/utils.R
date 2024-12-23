@@ -158,3 +158,10 @@ buildBasinDataPackage <- function(huc4) {
   return(list('terra'=outlist,
               'waterbodyLookUp'=waterbodyLookUp))
 }
+
+
+
+unlistGages <- function(gage_list){
+  df <- dplyr::bind_rows(gage_list)
+  return(df)
+}

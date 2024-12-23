@@ -9,17 +9,22 @@ prepGage <- function(gageID){
                   lon = dec_long_va,
                   DA_skm = drain_area_va * 2.58999) %>% #mi2 to km2
     dplyr::select(c('site_no', 'lat', 'lon', 'DA_skm'))
-  
+
   #get physiograhic region (for banfull depth model)
   sf::sf_use_s2(FALSE)
   regions <- sf::st_read('data/physio.shp') #physiographic regions
   regions <- fixGeometries(regions)
-  site_shp <- sf::st_as_sf(site, coords=c('lon', 'lat'), crs=sf::st_crs(4269))
+  site_shp <- tryCatch(sf::st_as_sf(site, coords=c('lon', 'lat'), crs=sf::st_crs(4269)),
+                      error = function(m){return(data.frame())})
+  if(nrow(site_shp)==0) {return(data.frame())} #if no gage data, move on
   
   shp_temp <- sf::st_join(site_shp, regions) #take the physiographic region that the basin is mostly in (dominant spatial intersection)
   site_shp$physio_region <- shp_temp$DIVISION
   
-  return(site_shp)
+  site <- site_shp %>%
+    sf::st_drop_geometry()
+
+  return(site)
 }
 
 
@@ -115,13 +120,13 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
   huc2 <- substr(huc4, 1, 2)
   
   sql <- paste0('SELECT * FROM NHDPlusCatchment WHERE NHDPlusID = ', reachID)
-  gage_unit_catchment <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
+  unit_catchment <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
                                     layer = 'NHDPlusCatchment',
                                     query = sql, #sql query to only load the catchment we want efficiently (see above)
                                     quiet = TRUE)
   
-  gage_unit_catchment <- terra::vect(gage_unit_catchment)
-  gage_unit_catchment <- terra::project(gage_unit_catchment, terra::crs(dem))
+  unit_catchment <- terra::vect(unit_catchment)
+  unit_catchment <- terra::project(unit_catchment, terra::crs(dem))
 
   #read in the nhd centerline
   sql <- paste0('SELECT * FROM NHDFlowline WHERE NHDPlusID = ', reachID)
@@ -136,8 +141,8 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
   flowline_terra <- terra::vect(flowline)
 
   #math the nhdplus unit catchment 
-  dem_clipped <- terra::crop(dem, gage_unit_catchment)
-  dem_clipped <- terra::mask(dem_clipped, gage_unit_catchment)
+  dem_clipped <- terra::crop(dem, unit_catchment)
+  dem_clipped <- terra::mask(dem_clipped, unit_catchment)
   
   #fill and breach the dem to calculate flow directions
   r <- terra::rast(flowline_terra, resolution=10, extent=terra::ext(dem_clipped))
@@ -153,9 +158,9 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
 
   #snap pour point to the largest flow accumulation cell (to avoid incorrect snapping based on nhd topology)
   flowaccum <- terra::flowAccumulation(d8_clipped) #flowdem::accum(d8_clipped, mode='d8')
-  flowaccum <- terra::mask(flowaccum, gage_unit_catchment)
+  flowaccum <- terra::mask(flowaccum, unit_catchment)
 
-  #extract gage's dem
+  #extract dem
   dem_clipped <- dem_clipped*0.01 #cm to m
   
   #use HAND method to get relative elevations for inundation mapping
@@ -191,8 +196,8 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
     #if most upstream catchment, there's nothing upstream to remove
     if(i == 1){
       #get HAND
-      gage_elev <- terra::extract(pixel_dem, pixel_pour_point)
-      rel_elev <- pixel_dem - gage_elev[1,]$elev_cm #band wasn't renamed, this is already in m
+      elev <- terra::extract(pixel_dem, pixel_pour_point)
+      rel_elev <- pixel_dem - elev[1,]$elev_cm #band wasn't renamed, this is already in m
       next
     }
     
@@ -206,8 +211,8 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
     pixel_dem <- terra::mask(pixel_dem, pixel_mask)
     
     #get HAND
-    gage_elev <- terra::extract(pixel_dem, pixel_pour_point)
-    rel_elev_temp <- pixel_dem - gage_elev[1,]$elev_cm #band wasn't renamed, this is already in m
+    elev <- terra::extract(pixel_dem, pixel_pour_point)
+    rel_elev_temp <- pixel_dem - elev[1,]$elev_cm #band wasn't renamed, this is already in m
     rel_elev <- terra::merge(rel_elev, rel_elev_temp)
   }
   
@@ -302,6 +307,7 @@ modelInundation <- function(inundationData, floodDepth){
 
 
 buildDepthAHG <- function(gage, minADCPMeas){
+  if(nrow(gage)==0){return(data.frame())}
   #prep
   gageID <- gage$site_no
 

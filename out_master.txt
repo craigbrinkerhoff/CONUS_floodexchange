@@ -5,9 +5,21 @@ The following objects are masked from ‘package:base’:
 
     intersect, setdiff, setequal, union
 
+Reading layer `USGSmodels_area' from data source 
+  `/gpfs/gibbs/pi/brinkerhoff/data/CONUS_connectivity_data/USGS_models/USGSmodels_area.shp' 
+  using driver `ESRI Shapefile'
+Simple feature collection with 50 features and 4 fields
+Geometry type: MULTIPOLYGON
+Dimension:     XY
+Bounding box:  xmin: -72.92665 ymin: 41.37625 xmax: -71.38918 ymax: 42.7047
+Geodetic CRS:  NAD83
+✔ skipped target gagesBasin_0108
+✔ skipped target gagesBasin_0109
 ✔ skipped target basinData_0108
 ✔ skipped target BHGmodel
-✔ skipped target gagesBasin_0108
+✔ skipped target basinData_0109
+✔ skipped target BHGdata
+✔ skipped target preppedFEMA
 ✔ skipped branch gage_0108_55fdcaacb673a122
 ✔ skipped branch gage_0108_9746b4cce344264c
 ✔ skipped branch gage_0108_e794341966c5cc55
@@ -107,105 +119,118 @@ The following objects are masked from ‘package:base’:
 ✔ skipped branch gage_0108_292c13aedcc3b1f2
 ✔ skipped branch gage_0108_b9c2ac104ae13f5b
 ✔ skipped pattern gage_0108
-✔ skipped branch depthAHG_0108_dd0d1a5298f7c1ac
-✔ skipped branch depthAHG_0108_b45c67e16fe18c21
-✔ skipped branch depthAHG_0108_eefbb1c40b08e17c
-✔ skipped branch depthAHG_0108_ffb511d24e92e123
-✔ skipped branch depthAHG_0108_7ae559b24c40a88e
-✔ skipped branch depthAHG_0108_2a7578bedc216c88
-✔ skipped branch depthAHG_0108_46f9791e0642eb60
-✔ skipped branch depthAHG_0108_01776c2ab01c8f92
-✔ skipped branch depthAHG_0108_bf3ceacbb454e750
-✔ skipped branch depthAHG_0108_280afb372e761229
-✔ skipped branch depthAHG_0108_97655ce97c60a91f
-✔ skipped branch depthAHG_0108_1086cd7949df60c2
-✔ skipped branch depthAHG_0108_a364797d50571703
-✔ skipped branch depthAHG_0108_4ec95311e8d98d3d
-✔ skipped branch depthAHG_0108_b5a4086c7f076787
-✔ skipped branch depthAHG_0108_3ac3ae280d39ec89
-✔ skipped branch depthAHG_0108_5fa9d8191edb2cc3
-✔ skipped branch depthAHG_0108_4f0bd13d7ca172e0
-✔ skipped branch depthAHG_0108_fd2fdbd08b777fab
-✔ skipped branch depthAHG_0108_70ce03f3501d8a8a
-✔ skipped branch depthAHG_0108_03e46ee061b20de6
-✔ skipped branch depthAHG_0108_4846da49725e74af
-✔ skipped branch depthAHG_0108_2fadb86423b79468
-✔ skipped branch depthAHG_0108_abb1cb97a3cfe181
-✔ skipped branch depthAHG_0108_2c1082c4b25c4023
-✔ skipped branch depthAHG_0108_6989aa6ace126b3b
-✔ skipped branch depthAHG_0108_ae14c232b0dc060a
-✔ skipped branch depthAHG_0108_05dd39f4727aa3ca
-✔ skipped branch depthAHG_0108_3a62dbe024f62807
-✔ skipped branch depthAHG_0108_eb4962c0d01353e1
-✔ skipped branch depthAHG_0108_7826a0d2e7597484
-✔ skipped branch depthAHG_0108_93369dc24391240a
-✔ skipped branch depthAHG_0108_d156545cf0061404
-✔ skipped branch depthAHG_0108_85cf8f1176f8f3c5
-✔ skipped branch depthAHG_0108_38db44ee5d38ba0c
-✔ skipped branch depthAHG_0108_24c1d10876c1e587
-✔ skipped branch depthAHG_0108_4005734acd601130
-✔ skipped branch depthAHG_0108_52e4f0037af51b90
-✔ skipped branch depthAHG_0108_1cd4986df502a69c
-✔ skipped branch depthAHG_0108_3ed693832b3957e0
-✔ skipped branch depthAHG_0108_57d0c8d332eeb69e
-✔ skipped branch depthAHG_0108_0a9051f2629c04eb
-✔ skipped branch depthAHG_0108_be73d055ad952993
-✔ skipped branch depthAHG_0108_c7e547b0a3e076c5
-✔ skipped branch depthAHG_0108_bdad629784da3157
-✔ skipped branch depthAHG_0108_0f36163e033b32b2
-✔ skipped branch depthAHG_0108_e3a330245cf67235
-✔ skipped branch depthAHG_0108_a4fe6309eea19a2d
-✔ skipped branch depthAHG_0108_94eba73a15ae7f7e
-✔ skipped branch depthAHG_0108_332fc3582cc228c9
-✔ skipped branch depthAHG_0108_fad4e9db121406d8
-✔ skipped branch depthAHG_0108_8240d33806dfa9f2
-✔ skipped branch depthAHG_0108_d76985f0cd69722a
-✔ skipped branch depthAHG_0108_a88a2f32d9de0363
-✔ skipped branch depthAHG_0108_ad906939e09e87ce
-✔ skipped branch depthAHG_0108_f6653a6151b397f5
-✔ skipped branch depthAHG_0108_90d457a08ec91298
-✔ skipped branch depthAHG_0108_31bef3162c8b066a
-✔ skipped branch depthAHG_0108_558bb1cf0e09bdd5
-✔ skipped branch depthAHG_0108_624c75772fbaa0d3
-✔ skipped branch depthAHG_0108_00f714aeee30f4fb
-✔ skipped branch depthAHG_0108_23cae5186651a229
-✔ skipped branch depthAHG_0108_1560cef63b5e4f21
-✔ skipped branch depthAHG_0108_33e0710b5892594a
-✔ skipped branch depthAHG_0108_2a5ff5097198cc16
-✔ skipped branch depthAHG_0108_fdee0393d1ecef54
-✔ skipped branch depthAHG_0108_3defa4a7b0766f60
-✔ skipped branch depthAHG_0108_5b24e1fa2b66f588
-✔ skipped branch depthAHG_0108_c79f2bda7a5b58df
-✔ skipped branch depthAHG_0108_81061ea86fcdd980
-✔ skipped branch depthAHG_0108_17434c08ab95de34
-✔ skipped branch depthAHG_0108_504c7d58ba1e26be
-✔ skipped branch depthAHG_0108_fa8803060ec938c3
-✔ skipped branch depthAHG_0108_2081faaa2768fe04
-✔ skipped branch depthAHG_0108_fb4a3a2a93ca83cd
-✔ skipped branch depthAHG_0108_b945d6e8afe1c78b
-✔ skipped branch depthAHG_0108_44a168e043ad5e64
-✔ skipped branch depthAHG_0108_a38911b14c59c795
-✔ skipped branch depthAHG_0108_9c4d3d792ecaf8ef
-✔ skipped branch depthAHG_0108_a545057318702858
-✔ skipped branch depthAHG_0108_e9d3de7c315509ee
-✔ skipped branch depthAHG_0108_4218bcd2a170d586
-✔ skipped branch depthAHG_0108_977f36118aadec7d
-✔ skipped branch depthAHG_0108_341fdcaf932aca42
-✔ skipped branch depthAHG_0108_a82608743de38e5c
-✔ skipped branch depthAHG_0108_87f73d92d90ccf91
-✔ skipped branch depthAHG_0108_7162b2af45dba5ef
-✔ skipped branch depthAHG_0108_4789f3578c4848cc
-✔ skipped branch depthAHG_0108_bba9ef82342e88d1
-✔ skipped branch depthAHG_0108_9461d69f671a1428
-✔ skipped branch depthAHG_0108_c589f657cfe910a5
-✔ skipped branch depthAHG_0108_ce6000d9132749dc
-✔ skipped branch depthAHG_0108_a0a629e50eafc199
-✔ skipped branch depthAHG_0108_9f8085972f3f9e8a
-✔ skipped branch depthAHG_0108_4145d6f2ea8cc011
-✔ skipped branch depthAHG_0108_2f934bf6dbb4d3cd
-✔ skipped branch depthAHG_0108_32bdc07fe063c149
-✔ skipped branch depthAHG_0108_b134f278cd065712
-✔ skipped pattern depthAHG_0108
+✔ skipped branch gage_0109_2f1262373fe8bf6c
+✔ skipped branch gage_0109_190d2fe632357c95
+✔ skipped branch gage_0109_21326514a78efc0d
+✔ skipped branch gage_0109_1fca50e8a6e389fb
+✔ skipped branch gage_0109_3e4b59119c190818
+✔ skipped branch gage_0109_f9e28e4490c7d202
+✔ skipped branch gage_0109_190c06ca70787b86
+✔ skipped branch gage_0109_6c1a33a337417216
+✔ skipped branch gage_0109_51f10ef8128f7159
+✔ skipped branch gage_0109_46858834a0498772
+✔ skipped branch gage_0109_1bb8c8e03d390599
+✔ skipped branch gage_0109_924cca7844005c8c
+✔ skipped branch gage_0109_aede5b35b73d586a
+✔ skipped branch gage_0109_fba6edacdc6e2243
+✔ skipped branch gage_0109_71b23e628c905648
+✔ skipped branch gage_0109_408ad349a553a905
+✔ skipped branch gage_0109_38ee7ac382c83959
+✔ skipped branch gage_0109_e0cf167b6ff09a2f
+✔ skipped branch gage_0109_7d41a3fdc7e98fe4
+✔ skipped branch gage_0109_c10f2f4a12ee2af9
+✔ skipped branch gage_0109_8e842cd642282e2a
+✔ skipped branch gage_0109_5939ba361ccd1971
+✔ skipped branch gage_0109_1c226c0511cf3e88
+✔ skipped branch gage_0109_4b7d2e0800328583
+✔ skipped branch gage_0109_c813c10810be306a
+✔ skipped branch gage_0109_bb02c060d3b65521
+✔ skipped branch gage_0109_39478faf5d3a42ae
+✔ skipped branch gage_0109_9dc3aa0e34bde654
+✔ skipped branch gage_0109_ccc5681e7e209a29
+✔ skipped branch gage_0109_ed525017f4461835
+✔ skipped branch gage_0109_2b844f0f4090e470
+✔ skipped branch gage_0109_8857c5010edc357e
+✔ skipped branch gage_0109_d05d8f0c0becb44e
+✔ skipped branch gage_0109_2c3af9e0a258750b
+✔ skipped branch gage_0109_683af15520b56138
+✔ skipped branch gage_0109_2bfbbb10947ab074
+✔ skipped branch gage_0109_e231a3b96fca4698
+✔ skipped branch gage_0109_554f33f5fe6ba3d1
+✔ skipped branch gage_0109_0b18f280e29e93bc
+✔ skipped branch gage_0109_62ce655244f41362
+✔ skipped branch gage_0109_2b4fafee9087920b
+✔ skipped branch gage_0109_a5dcc99398cf41d6
+✔ skipped branch gage_0109_8950c2285402e134
+✔ skipped branch gage_0109_4692c7decc8e7934
+✔ skipped branch gage_0109_0d45720850f34f08
+✔ skipped branch gage_0109_811bdd269fa2e043
+✔ skipped branch gage_0109_ca48fbc35bdcfd07
+✔ skipped branch gage_0109_ecd80d70d5b536c2
+✔ skipped branch gage_0109_24d2931751a00426
+✔ skipped branch gage_0109_9462c152714e976e
+✔ skipped branch gage_0109_083cc3bebcf36f1a
+✔ skipped branch gage_0109_2e05e8b9b80e9c99
+✔ skipped branch gage_0109_18ee5796a44c9077
+✔ skipped branch gage_0109_da71463032c2ffea
+✔ skipped branch gage_0109_95d8eaa38a936d2a
+✔ skipped branch gage_0109_73c8c15588845d88
+✔ skipped branch gage_0109_844678bed59f5d24
+✔ skipped branch gage_0109_5a22c492eb43f198
+✔ skipped branch gage_0109_07236afce9b184f9
+✔ skipped branch gage_0109_2896a6052c694bae
+✔ skipped branch gage_0109_71cfdc7d0fb7c7c7
+✔ skipped branch gage_0109_ef298b7a9bd85a95
+✔ skipped branch gage_0109_9aa34b2f41b4b34c
+✔ skipped branch gage_0109_4aeadd5610e47c67
+✔ skipped branch gage_0109_50a8667704bad5a5
+✔ skipped branch gage_0109_5e8dc8210b54c7e8
+✔ skipped branch gage_0109_4c08adec091c9330
+✔ skipped branch gage_0109_fe586723dd236366
+✔ skipped branch gage_0109_364c4be645cdd43b
+✔ skipped branch gage_0109_f6f8636fc362a1bb
+✔ skipped branch gage_0109_8ed3d5a6056ff57d
+✔ skipped branch gage_0109_af58bb125a784fb8
+✔ skipped branch gage_0109_408b7441468b9e7d
+✔ skipped branch gage_0109_08ec67313aa4f21d
+✔ skipped branch gage_0109_3c4777d92245f7ee
+✔ skipped branch gage_0109_460f7578d4ec792a
+✔ skipped branch gage_0109_b93153da69203478
+✔ skipped branch gage_0109_679c951c785b9a7f
+✔ skipped branch gage_0109_0ed4b52de529f37c
+✔ skipped branch gage_0109_415778aebd4abf2a
+✔ skipped branch gage_0109_025fedf087384f98
+✔ skipped branch gage_0109_85cade8e71ed1222
+✔ skipped branch gage_0109_3ea2dec7dbc52cbd
+✔ skipped branch gage_0109_1be93fa0618be04b
+✔ skipped branch gage_0109_7c8e0735994b6c43
+✔ skipped branch gage_0109_616dec26d0c7d37a
+✔ skipped branch gage_0109_5e7fe4e0b9b949f4
+✔ skipped branch gage_0109_8f75ab74827bdf82
+✔ skipped branch gage_0109_40f9d29f679bbc63
+✔ skipped branch gage_0109_3db55f7465250dc3
+✔ skipped branch gage_0109_c3f46ad7da27423e
+✔ skipped branch gage_0109_0a4dab889ed9b401
+✔ skipped branch gage_0109_eac749176c108172
+✔ skipped branch gage_0109_56151c42a4edbfe9
+✔ skipped branch gage_0109_e52b46cf7ab25c4e
+✔ skipped branch gage_0109_79018216a4adf41d
+✔ skipped branch gage_0109_ded051e1b95ede5d
+✔ skipped branch gage_0109_54265b5d2fa7093e
+✔ skipped branch gage_0109_9d9101951f313e54
+✔ skipped branch gage_0109_73a48c935c949af6
+✔ skipped branch gage_0109_d38dd72065d5976c
+✔ skipped branch gage_0109_aa16db751580d252
+✔ skipped branch gage_0109_4d429886f8effe71
+✔ skipped branch gage_0109_52edcb6769b26621
+✔ skipped branch gage_0109_1909a98c4f3fdfcf
+✔ skipped branch gage_0109_de3dac58e3548b1c
+✔ skipped branch gage_0109_19a5face1a99d8e7
+✔ skipped branch gage_0109_7c5426f9ede2da67
+✔ skipped branch gage_0109_a90c27b9ccdbd7fb
+✔ skipped branch gage_0109_52b42c3e1e37ae72
+✔ skipped pattern gage_0109
+✔ skipped target gages_fixed_0108
 ✔ skipped branch gageRecord_0108_dd0d1a5298f7c1ac
 ✔ skipped branch gageRecord_0108_b45c67e16fe18c21
 ✔ skipped branch gageRecord_0108_eefbb1c40b08e17c
@@ -305,8 +330,356 @@ The following objects are masked from ‘package:base’:
 ✔ skipped branch gageRecord_0108_32bdc07fe063c149
 ✔ skipped branch gageRecord_0108_b134f278cd065712
 ✔ skipped pattern gageRecord_0108
+✔ skipped branch depthAHG_0108_dd0d1a5298f7c1ac
+✔ skipped branch depthAHG_0108_b45c67e16fe18c21
+✔ skipped branch depthAHG_0108_eefbb1c40b08e17c
+✔ skipped branch depthAHG_0108_ffb511d24e92e123
+✔ skipped branch depthAHG_0108_7ae559b24c40a88e
+✔ skipped branch depthAHG_0108_2a7578bedc216c88
+✔ skipped branch depthAHG_0108_46f9791e0642eb60
+✔ skipped branch depthAHG_0108_01776c2ab01c8f92
+✔ skipped branch depthAHG_0108_bf3ceacbb454e750
+✔ skipped branch depthAHG_0108_280afb372e761229
+✔ skipped branch depthAHG_0108_97655ce97c60a91f
+✔ skipped branch depthAHG_0108_1086cd7949df60c2
+✔ skipped branch depthAHG_0108_a364797d50571703
+✔ skipped branch depthAHG_0108_4ec95311e8d98d3d
+✔ skipped branch depthAHG_0108_b5a4086c7f076787
+✔ skipped branch depthAHG_0108_3ac3ae280d39ec89
+✔ skipped branch depthAHG_0108_5fa9d8191edb2cc3
+✔ skipped branch depthAHG_0108_4f0bd13d7ca172e0
+✔ skipped branch depthAHG_0108_fd2fdbd08b777fab
+✔ skipped branch depthAHG_0108_70ce03f3501d8a8a
+✔ skipped branch depthAHG_0108_03e46ee061b20de6
+✔ skipped branch depthAHG_0108_4846da49725e74af
+✔ skipped branch depthAHG_0108_2fadb86423b79468
+✔ skipped branch depthAHG_0108_abb1cb97a3cfe181
+✔ skipped branch depthAHG_0108_2c1082c4b25c4023
+✔ skipped branch depthAHG_0108_6989aa6ace126b3b
+✔ skipped branch depthAHG_0108_ae14c232b0dc060a
+✔ skipped branch depthAHG_0108_05dd39f4727aa3ca
+✔ skipped branch depthAHG_0108_3a62dbe024f62807
+✔ skipped branch depthAHG_0108_eb4962c0d01353e1
+✔ skipped branch depthAHG_0108_7826a0d2e7597484
+✔ skipped branch depthAHG_0108_93369dc24391240a
+✔ skipped branch depthAHG_0108_d156545cf0061404
+✔ skipped branch depthAHG_0108_85cf8f1176f8f3c5
+✔ skipped branch depthAHG_0108_38db44ee5d38ba0c
+✔ skipped branch depthAHG_0108_24c1d10876c1e587
+✔ skipped branch depthAHG_0108_4005734acd601130
+✔ skipped branch depthAHG_0108_52e4f0037af51b90
+✔ skipped branch depthAHG_0108_1cd4986df502a69c
+✔ skipped branch depthAHG_0108_3ed693832b3957e0
+✔ skipped branch depthAHG_0108_57d0c8d332eeb69e
+✔ skipped branch depthAHG_0108_0a9051f2629c04eb
+✔ skipped branch depthAHG_0108_be73d055ad952993
+✔ skipped branch depthAHG_0108_c7e547b0a3e076c5
+✔ skipped branch depthAHG_0108_bdad629784da3157
+✔ skipped branch depthAHG_0108_0f36163e033b32b2
+✔ skipped branch depthAHG_0108_e3a330245cf67235
+✔ skipped branch depthAHG_0108_a4fe6309eea19a2d
+✔ skipped branch depthAHG_0108_94eba73a15ae7f7e
+✔ skipped branch depthAHG_0108_332fc3582cc228c9
+✔ skipped branch depthAHG_0108_fad4e9db121406d8
+✔ skipped branch depthAHG_0108_8240d33806dfa9f2
+✔ skipped branch depthAHG_0108_d76985f0cd69722a
+✔ skipped branch depthAHG_0108_a88a2f32d9de0363
+✔ skipped branch depthAHG_0108_ad906939e09e87ce
+✔ skipped branch depthAHG_0108_f6653a6151b397f5
+✔ skipped branch depthAHG_0108_90d457a08ec91298
+✔ skipped branch depthAHG_0108_31bef3162c8b066a
+✔ skipped branch depthAHG_0108_558bb1cf0e09bdd5
+✔ skipped branch depthAHG_0108_624c75772fbaa0d3
+✔ skipped branch depthAHG_0108_00f714aeee30f4fb
+✔ skipped branch depthAHG_0108_23cae5186651a229
+✔ skipped branch depthAHG_0108_1560cef63b5e4f21
+✔ skipped branch depthAHG_0108_33e0710b5892594a
+✔ skipped branch depthAHG_0108_2a5ff5097198cc16
+✔ skipped branch depthAHG_0108_fdee0393d1ecef54
+✔ skipped branch depthAHG_0108_3defa4a7b0766f60
+✔ skipped branch depthAHG_0108_5b24e1fa2b66f588
+✔ skipped branch depthAHG_0108_c79f2bda7a5b58df
+✔ skipped branch depthAHG_0108_81061ea86fcdd980
+✔ skipped branch depthAHG_0108_17434c08ab95de34
+✔ skipped branch depthAHG_0108_504c7d58ba1e26be
+✔ skipped branch depthAHG_0108_fa8803060ec938c3
+✔ skipped branch depthAHG_0108_2081faaa2768fe04
+✔ skipped branch depthAHG_0108_fb4a3a2a93ca83cd
+✔ skipped branch depthAHG_0108_b945d6e8afe1c78b
+✔ skipped branch depthAHG_0108_44a168e043ad5e64
+✔ skipped branch depthAHG_0108_a38911b14c59c795
+✔ skipped branch depthAHG_0108_9c4d3d792ecaf8ef
+✔ skipped branch depthAHG_0108_a545057318702858
+✔ skipped branch depthAHG_0108_e9d3de7c315509ee
+✔ skipped branch depthAHG_0108_4218bcd2a170d586
+✔ skipped branch depthAHG_0108_977f36118aadec7d
+✔ skipped branch depthAHG_0108_341fdcaf932aca42
+✔ skipped branch depthAHG_0108_a82608743de38e5c
+✔ skipped branch depthAHG_0108_87f73d92d90ccf91
+✔ skipped branch depthAHG_0108_7162b2af45dba5ef
+✔ skipped branch depthAHG_0108_4789f3578c4848cc
+✔ skipped branch depthAHG_0108_bba9ef82342e88d1
+✔ skipped branch depthAHG_0108_9461d69f671a1428
+✔ skipped branch depthAHG_0108_c589f657cfe910a5
+✔ skipped branch depthAHG_0108_ce6000d9132749dc
+✔ skipped branch depthAHG_0108_a0a629e50eafc199
+✔ skipped branch depthAHG_0108_9f8085972f3f9e8a
+✔ skipped branch depthAHG_0108_4145d6f2ea8cc011
+✔ skipped branch depthAHG_0108_2f934bf6dbb4d3cd
+✔ skipped branch depthAHG_0108_32bdc07fe063c149
+✔ skipped branch depthAHG_0108_b134f278cd065712
+✔ skipped pattern depthAHG_0108
+✔ skipped target gages_fixed_0109
+✔ skipped branch gageRecord_0109_29f4f636371ff11b
+✔ skipped branch gageRecord_0109_b1bdabacc7dc4ca6
+✔ skipped branch gageRecord_0109_f5ac119da4eb22cc
+✔ skipped branch gageRecord_0109_2fe41cdb1e6c51d4
+✔ skipped branch gageRecord_0109_bac96ba49eb86514
+✔ skipped branch gageRecord_0109_425fded3ff8596ac
+✔ skipped branch gageRecord_0109_80b043c1e48cedb7
+✔ skipped branch gageRecord_0109_202c1a42cdd817dd
+✔ skipped branch gageRecord_0109_6ef32008eb8cc0a3
+✔ skipped branch gageRecord_0109_94b23f4a4334a350
+✔ skipped branch gageRecord_0109_e44d32d37baa62d1
+✔ skipped branch gageRecord_0109_d2150a4e3cc5a387
+✔ skipped branch gageRecord_0109_69879352ab83cacb
+✔ skipped branch gageRecord_0109_3e43efbadb2c08f3
+✔ skipped branch gageRecord_0109_b8473e50f7bee6ee
+✔ skipped branch gageRecord_0109_416d1beb82287154
+✔ skipped branch gageRecord_0109_126f53475cbb50d7
+✔ skipped branch gageRecord_0109_d838417c7f972cd7
+✔ skipped branch gageRecord_0109_67561485dd7648c1
+✔ skipped branch gageRecord_0109_12fdab574eb59c57
+✔ skipped branch gageRecord_0109_a22c72dd1772b206
+✔ skipped branch gageRecord_0109_881cf9826183945c
+✔ skipped branch gageRecord_0109_ce84b5bff334a2d7
+✔ skipped branch gageRecord_0109_9f866a76fbcb0b12
+✔ skipped branch gageRecord_0109_5bda7c5f85aba85b
+✔ skipped branch gageRecord_0109_cd8e4b28fb6d79c1
+✔ skipped branch gageRecord_0109_7220fb088ac7241d
+✔ skipped branch gageRecord_0109_a97f724804cf6afe
+✔ skipped branch gageRecord_0109_0e29fa2429562287
+✔ skipped branch gageRecord_0109_75d85191defc714e
+✔ skipped branch gageRecord_0109_7e54811ae427a603
+✔ skipped branch gageRecord_0109_b197e7c50ec91635
+✔ skipped branch gageRecord_0109_ddd08824af65e5e2
+✔ skipped branch gageRecord_0109_8e81afefdec3db15
+✔ skipped branch gageRecord_0109_738fc019225d8abe
+✔ skipped branch gageRecord_0109_42e5cffba1db3d96
+✔ skipped branch gageRecord_0109_1588ebd70eeb6bee
+✔ skipped branch gageRecord_0109_5d3d71e108e0ba1c
+✔ skipped branch gageRecord_0109_f7e02df284618964
+✔ skipped branch gageRecord_0109_7cbf97581423ce4b
+✔ skipped branch gageRecord_0109_5f5b9cfcf93621d0
+✔ skipped branch gageRecord_0109_688ee7447efd33be
+✔ skipped branch gageRecord_0109_f5777d102a4f212f
+✔ skipped branch gageRecord_0109_25b65e720f15e140
+✔ skipped branch gageRecord_0109_59e1f12f1893dd29
+✔ skipped branch gageRecord_0109_bfc64eca229166ab
+✔ skipped branch gageRecord_0109_ab991b733b5a655e
+✔ skipped branch gageRecord_0109_0e6c5737c2c64bc8
+✔ skipped branch gageRecord_0109_135936a9c82367d5
+✔ skipped branch gageRecord_0109_9d49c4cf1fed4b37
+✔ skipped branch gageRecord_0109_400986a9b38689d1
+✔ skipped branch gageRecord_0109_2fba44759cfff899
+✔ skipped branch gageRecord_0109_3846b85a17d04c59
+✔ skipped branch gageRecord_0109_b03c291371a9b627
+✔ skipped branch gageRecord_0109_53c6ad64fddf55b7
+✔ skipped branch gageRecord_0109_9fe11e6e48728031
+✔ skipped branch gageRecord_0109_f65c6ea3dc3de7aa
+✔ skipped branch gageRecord_0109_baf95c35cae22bfe
+✔ skipped branch gageRecord_0109_83be3d9c958774f9
+✔ skipped branch gageRecord_0109_cec9ef0887292c6e
+✔ skipped branch gageRecord_0109_5067ec048907ab74
+✔ skipped branch gageRecord_0109_c7407158c71319f8
+✔ skipped branch gageRecord_0109_9b02c9fe810cf28a
+✔ skipped branch gageRecord_0109_54cd05114eac0f54
+✔ skipped branch gageRecord_0109_2898cec8f6f6ecd9
+✔ skipped branch gageRecord_0109_32d29f481a1ac25a
+✔ skipped branch gageRecord_0109_f8c2e9799000796b
+✔ skipped branch gageRecord_0109_f14e9a6ea7238a0a
+✔ skipped branch gageRecord_0109_499c139d61c13536
+✔ skipped branch gageRecord_0109_21332f233979c311
+✔ skipped branch gageRecord_0109_8c27bb3e62fb627a
+✔ skipped branch gageRecord_0109_f4483d88537c6084
+✔ skipped branch gageRecord_0109_6210573641b812b1
+✔ skipped branch gageRecord_0109_1d7c8a1de2d49c99
+✔ skipped branch gageRecord_0109_0e482ea592c7434b
+✔ skipped branch gageRecord_0109_b070cf5c68b6aaa1
+✔ skipped branch gageRecord_0109_369984e1521b0c99
+✔ skipped branch gageRecord_0109_585d752375ab65e2
+✔ skipped branch gageRecord_0109_0558c03d67a3ec4f
+✔ skipped branch gageRecord_0109_fcc0a15b493e19aa
+✔ skipped branch gageRecord_0109_276a9751ad75dd09
+✔ skipped branch gageRecord_0109_dc8c207f0f1e5526
+✔ skipped branch gageRecord_0109_77b8b8413ff0776c
+✔ skipped branch gageRecord_0109_bf61657189d96c44
+✔ skipped branch gageRecord_0109_7f85bb7d0e8774fc
+✔ skipped branch gageRecord_0109_04326a20186089ef
+✔ skipped branch gageRecord_0109_efb026c1065b1bcd
+✔ skipped branch gageRecord_0109_2d75bc61277b3cc1
+✔ skipped branch gageRecord_0109_c587b517e5ab5d9c
+✔ skipped branch gageRecord_0109_62d8dbaecc0bbb15
+✔ skipped branch gageRecord_0109_c0e8d8afcc72808e
+✔ skipped branch gageRecord_0109_df478588fd1f3db0
+✔ skipped branch gageRecord_0109_8d3a8d538c38252f
+✔ skipped branch gageRecord_0109_f9ee9aae806ceedc
+✔ skipped branch gageRecord_0109_cbf03b1eba9d5034
+✔ skipped branch gageRecord_0109_35cf42f21c516825
+✔ skipped branch gageRecord_0109_b8ab73f92e09524c
+✔ skipped branch gageRecord_0109_83127dee850bb3d3
+✔ skipped branch gageRecord_0109_65882c4a540382e1
+✔ skipped branch gageRecord_0109_bb4c1e4b9f76f0eb
+✔ skipped branch gageRecord_0109_0ba1fcc92379467e
+✔ skipped branch gageRecord_0109_6a60329bc0d301bb
+✔ skipped branch gageRecord_0109_c055e99510b6ba0f
+✔ skipped branch gageRecord_0109_4d91aeb74e116321
+✔ skipped branch gageRecord_0109_20d3daf65b15855b
+✔ skipped branch gageRecord_0109_2baa5d35d5c67409
+✔ skipped branch gageRecord_0109_b39af1c0c7fe0660
+✔ skipped branch gageRecord_0109_a99cf66fa3642321
+✔ skipped branch gageRecord_0109_9d76620100609d88
+✔ skipped branch gageRecord_0109_564b1e5014b4ed0b
+✔ skipped pattern gageRecord_0109
+✔ skipped branch depthAHG_0109_29f4f636371ff11b
+✔ skipped branch depthAHG_0109_b1bdabacc7dc4ca6
+✔ skipped branch depthAHG_0109_f5ac119da4eb22cc
+✔ skipped branch depthAHG_0109_2fe41cdb1e6c51d4
+✔ skipped branch depthAHG_0109_bac96ba49eb86514
+✔ skipped branch depthAHG_0109_425fded3ff8596ac
+✔ skipped branch depthAHG_0109_80b043c1e48cedb7
+✔ skipped branch depthAHG_0109_202c1a42cdd817dd
+✔ skipped branch depthAHG_0109_6ef32008eb8cc0a3
+✔ skipped branch depthAHG_0109_94b23f4a4334a350
+✔ skipped branch depthAHG_0109_e44d32d37baa62d1
+✔ skipped branch depthAHG_0109_d2150a4e3cc5a387
+✔ skipped branch depthAHG_0109_69879352ab83cacb
+✔ skipped branch depthAHG_0109_3e43efbadb2c08f3
+✔ skipped branch depthAHG_0109_b8473e50f7bee6ee
+✔ skipped branch depthAHG_0109_416d1beb82287154
+✔ skipped branch depthAHG_0109_126f53475cbb50d7
+✔ skipped branch depthAHG_0109_d838417c7f972cd7
+✔ skipped branch depthAHG_0109_67561485dd7648c1
+✔ skipped branch depthAHG_0109_12fdab574eb59c57
+✔ skipped branch depthAHG_0109_a22c72dd1772b206
+✔ skipped branch depthAHG_0109_881cf9826183945c
+✔ skipped branch depthAHG_0109_ce84b5bff334a2d7
+✔ skipped branch depthAHG_0109_9f866a76fbcb0b12
+✔ skipped branch depthAHG_0109_5bda7c5f85aba85b
+✔ skipped branch depthAHG_0109_cd8e4b28fb6d79c1
+✔ skipped branch depthAHG_0109_7220fb088ac7241d
+✔ skipped branch depthAHG_0109_a97f724804cf6afe
+✔ skipped branch depthAHG_0109_0e29fa2429562287
+✔ skipped branch depthAHG_0109_75d85191defc714e
+✔ skipped branch depthAHG_0109_7e54811ae427a603
+✔ skipped branch depthAHG_0109_b197e7c50ec91635
+✔ skipped branch depthAHG_0109_ddd08824af65e5e2
+✔ skipped branch depthAHG_0109_8e81afefdec3db15
+✔ skipped branch depthAHG_0109_738fc019225d8abe
+✔ skipped branch depthAHG_0109_42e5cffba1db3d96
+✔ skipped branch depthAHG_0109_1588ebd70eeb6bee
+✔ skipped branch depthAHG_0109_5d3d71e108e0ba1c
+✔ skipped branch depthAHG_0109_f7e02df284618964
+✔ skipped branch depthAHG_0109_7cbf97581423ce4b
+✔ skipped branch depthAHG_0109_5f5b9cfcf93621d0
+✔ skipped branch depthAHG_0109_688ee7447efd33be
+✔ skipped branch depthAHG_0109_f5777d102a4f212f
+✔ skipped branch depthAHG_0109_25b65e720f15e140
+✔ skipped branch depthAHG_0109_59e1f12f1893dd29
+✔ skipped branch depthAHG_0109_bfc64eca229166ab
+✔ skipped branch depthAHG_0109_ab991b733b5a655e
+✔ skipped branch depthAHG_0109_0e6c5737c2c64bc8
+✔ skipped branch depthAHG_0109_135936a9c82367d5
+✔ skipped branch depthAHG_0109_9d49c4cf1fed4b37
+✔ skipped branch depthAHG_0109_400986a9b38689d1
+✔ skipped branch depthAHG_0109_2fba44759cfff899
+✔ skipped branch depthAHG_0109_3846b85a17d04c59
+✔ skipped branch depthAHG_0109_b03c291371a9b627
+✔ skipped branch depthAHG_0109_53c6ad64fddf55b7
+✔ skipped branch depthAHG_0109_9fe11e6e48728031
+✔ skipped branch depthAHG_0109_f65c6ea3dc3de7aa
+✔ skipped branch depthAHG_0109_baf95c35cae22bfe
+✔ skipped branch depthAHG_0109_83be3d9c958774f9
+✔ skipped branch depthAHG_0109_cec9ef0887292c6e
+✔ skipped branch depthAHG_0109_5067ec048907ab74
+✔ skipped branch depthAHG_0109_c7407158c71319f8
+✔ skipped branch depthAHG_0109_9b02c9fe810cf28a
+✔ skipped branch depthAHG_0109_54cd05114eac0f54
+✔ skipped branch depthAHG_0109_2898cec8f6f6ecd9
+✔ skipped branch depthAHG_0109_32d29f481a1ac25a
+✔ skipped branch depthAHG_0109_f8c2e9799000796b
+✔ skipped branch depthAHG_0109_f14e9a6ea7238a0a
+✔ skipped branch depthAHG_0109_499c139d61c13536
+✔ skipped branch depthAHG_0109_21332f233979c311
+✔ skipped branch depthAHG_0109_8c27bb3e62fb627a
+✔ skipped branch depthAHG_0109_f4483d88537c6084
+✔ skipped branch depthAHG_0109_6210573641b812b1
+✔ skipped branch depthAHG_0109_1d7c8a1de2d49c99
+✔ skipped branch depthAHG_0109_0e482ea592c7434b
+✔ skipped branch depthAHG_0109_b070cf5c68b6aaa1
+✔ skipped branch depthAHG_0109_369984e1521b0c99
+✔ skipped branch depthAHG_0109_585d752375ab65e2
+✔ skipped branch depthAHG_0109_0558c03d67a3ec4f
+✔ skipped branch depthAHG_0109_fcc0a15b493e19aa
+✔ skipped branch depthAHG_0109_276a9751ad75dd09
+✔ skipped branch depthAHG_0109_dc8c207f0f1e5526
+✔ skipped branch depthAHG_0109_77b8b8413ff0776c
+✔ skipped branch depthAHG_0109_bf61657189d96c44
+✔ skipped branch depthAHG_0109_7f85bb7d0e8774fc
+✔ skipped branch depthAHG_0109_04326a20186089ef
+✔ skipped branch depthAHG_0109_efb026c1065b1bcd
+✔ skipped branch depthAHG_0109_2d75bc61277b3cc1
+✔ skipped branch depthAHG_0109_c587b517e5ab5d9c
+✔ skipped branch depthAHG_0109_62d8dbaecc0bbb15
+✔ skipped branch depthAHG_0109_c0e8d8afcc72808e
+✔ skipped branch depthAHG_0109_df478588fd1f3db0
+✔ skipped branch depthAHG_0109_8d3a8d538c38252f
+✔ skipped branch depthAHG_0109_f9ee9aae806ceedc
+✔ skipped branch depthAHG_0109_cbf03b1eba9d5034
+✔ skipped branch depthAHG_0109_35cf42f21c516825
+✔ skipped branch depthAHG_0109_b8ab73f92e09524c
+✔ skipped branch depthAHG_0109_83127dee850bb3d3
+✔ skipped branch depthAHG_0109_65882c4a540382e1
+✔ skipped branch depthAHG_0109_bb4c1e4b9f76f0eb
+✔ skipped branch depthAHG_0109_0ba1fcc92379467e
+✔ skipped branch depthAHG_0109_6a60329bc0d301bb
+✔ skipped branch depthAHG_0109_c055e99510b6ba0f
+✔ skipped branch depthAHG_0109_4d91aeb74e116321
+✔ skipped branch depthAHG_0109_20d3daf65b15855b
+✔ skipped branch depthAHG_0109_2baa5d35d5c67409
+✔ skipped branch depthAHG_0109_b39af1c0c7fe0660
+✔ skipped branch depthAHG_0109_a99cf66fa3642321
+✔ skipped branch depthAHG_0109_9d76620100609d88
+✔ skipped branch depthAHG_0109_564b1e5014b4ed0b
+✔ skipped pattern depthAHG_0109
 ✔ skipped target upscalingModel_0108
-✔ skipped target basinModel_0108
+✔ skipped target gage_combined
+✔ skipped target upscalingModel_0109
+▶ dispatched target basinModel_0108
+Reading layer `WBDHU4' from data source 
+  `/gpfs/gibbs/pi/brinkerhoff/data/CONUS_ephemeral_data/HUC2_01/WBD_01_HU2_Shape/Shape/WBDHU4.shp' 
+  using driver `ESRI Shapefile'
+Simple feature collection with 10 features and 15 fields
+Geometry type: MULTIPOLYGON
+Dimension:     XY
+Bounding box:  xmin: -73.73798 ymin: 40.9391 xmax: -66.01875 ymax: 48.09971
+Geodetic CRS:  NAD83
+Spherical geometry (s2) switched off
+Reading layer `physio' from data source 
+  `/gpfs/gibbs/pi/brinkerhoff/repos/CONUS_connectivity/data/physio.shp' 
+  using driver `ESRI Shapefile'
+Simple feature collection with 501 features and 10 fields
+Geometry type: POLYGON
+Dimension:     XY
+Bounding box:  xmin: -124.7339 ymin: 24.54724 xmax: -66.95722 ymax: 49.37173
+Geodetic CRS:  NAD83
+although coordinates are longitude/latitude, st_intersection assumes that they
+are planar
+Linking to GEOS 3.12.2, GDAL 3.9.2, PROJ 9.5.0; sf_use_s2() is FALSE
+● completed target basinModel_0108 [9.752 seconds, 41.133 megabytes]
+✔ skipped target upscalingPlot_0108
+✔ skipped target basinModel_0109
+✔ skipped target upscalingPlot_0109
 ▶ dispatched target basinAnalysis_0108
 ------------------------------------------------------------------------------
 You have loaded plyr after dplyr - this is likely to cause problems.
@@ -324,12 +697,65 @@ The following objects are masked from ‘package:dplyr’:
 Loading required package: foreach
 Loading required package: iterators
 Loading required package: parallel
-● completed target basinAnalysis_0108 [45.564 minutes, 42.054 megabytes]
-▶ ended pipeline [45.948 minutes]
+● completed target basinAnalysis_0108 [34.966 minutes, 42.053 megabytes]
+✔ skipped target basinAnalysis_0109
+▶ dispatched target val_FEMA_0108
+Reading layer `WBDHU4' from data source 
+  `/gpfs/gibbs/pi/brinkerhoff/data/CONUS_ephemeral_data/HUC2_01/WBD_01_HU2_Shape/Shape/WBDHU4.shp' 
+  using driver `ESRI Shapefile'
+Simple feature collection with 10 features and 15 fields
+Geometry type: MULTIPOLYGON
+Dimension:     XY
+Bounding box:  xmin: -73.73798 ymin: 40.9391 xmax: -66.01875 ymax: 48.09971
+Geodetic CRS:  NAD83
+although coordinates are longitude/latitude, st_intersects assumes that they
+are planar
+although coordinates are longitude/latitude, st_within assumes that they are
+planar
+although coordinates are longitude/latitude, st_intersection assumes that they
+are planar
+● completed target val_FEMA_0108 [1.418 minutes, 7.866 megabytes]
+▶ dispatched target hortonResults_0108
+● completed target hortonResults_0108 [0.102 seconds, 678 bytes]
+▶ dispatched target val_USGS_0108
+although coordinates are longitude/latitude, st_within assumes that they are
+planar
+`summarise()` has grouped output by 'NHDPlusID'. You can override using the
+`.groups` argument.
+although coordinates are longitude/latitude, st_intersection assumes that they
+are planar
+`summarise()` has grouped output by 'NHDPlusID'. You can override using the
+`.groups` argument.
+● completed target val_USGS_0108 [1.43 minutes, 6.732 kilobytes]
+✔ skipped target val_FEMA_0109
+▶ dispatched target hortonResults_0109
+● completed target hortonResults_0109 [0.026 seconds, 572 bytes]
+✔ skipped target val_USGS_0109
+▶ dispatched target val_FEMA_combined
+● completed target val_FEMA_combined [0.164 seconds, 13.764 megabytes]
+▶ dispatched target hortonResults_combined
+● completed target hortonResults_combined [0.001 seconds, 874 bytes]
+▶ dispatched target val_USGS_combined
+● completed target val_USGS_combined [0 seconds, 8.609 kilobytes]
+▶ dispatched target valFEMAFig
+`geom_smooth()` using formula = 'y ~ x'
+`geom_smooth()` using formula = 'y ~ x'
+● completed target valFEMAFig [3.193 seconds, 13.764 megabytes]
+▶ dispatched target valUSGSFig
+`geom_smooth()` using formula = 'y ~ x'
+● completed target valUSGSFig [0.752 seconds, 8.609 kilobytes]
+▶ ended pipeline [38.677 minutes]
 Warning messages:
-1: Detected an unexpected many-to-many relationship between `x` and `y`.
+1: attribute variables are assumed to be spatially constant throughout all geometries 
+2: Detected an unexpected many-to-many relationship between `x` and `y`.
 ℹ Row 724 of `x` matches multiple rows in `y`.
 ℹ Row 724 of `y` matches multiple rows in `x`.
 ℹ If a many-to-many relationship is expected, set `relationship =
   "many-to-many"` to silence this warning. 
-2: 1 targets produced warnings. Run targets::tar_meta(fields = warnings, complete_only = TRUE) for the messages. 
+3: attribute variables are assumed to be spatially constant throughout all geometries 
+4: attribute variables are assumed to be spatially constant throughout all geometries 
+5: is.na() applied to non-(list or vector) of type 'language' 
+6: is.na() applied to non-(list or vector) of type 'language' 
+7: is.na() applied to non-(list or vector) of type 'language' 
+8: is.na() applied to non-(list or vector) of type 'language' 
+9: 5 targets produced warnings. Run targets::tar_meta(fields = warnings, complete_only = TRUE) for the messages. 

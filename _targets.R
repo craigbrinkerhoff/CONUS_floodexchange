@@ -24,16 +24,18 @@ minRecordLength <- 10 #[yrs] minimum number of years on record for a gage to be 
 minADCPMeas <- 20 #min depth stage adcp measurements for AHG
 minAHGr2 <- 0.30 #min depth AHG fit
 
+usgs_maps <- sf::st_read('data/path_to_data/CONUS_connectivity_data/USGS_models/USGSmodels_area.shp')
+
 #distributed computing across cpu-node
 # tar_option_set(
-#   controller = crew_controller_local(workers = 18)
+#   controller = crew_controller_local(workers = 45)
 # )
 
 ## MAP PIPELINE OVER STATIC BRANCHES OF GAGES
 gageAnalysis <- tar_map(
   values = tibble( # Setup static branching
     method_function = rlang::syms(c("getBasinGages")),
-    huc4 = c('0108')
+    huc4 = c('0108', '0109') #0110
   ),
   names='huc4',
 
@@ -45,6 +47,7 @@ gageAnalysis <- tar_map(
   tar_target(gageRecord, prepFlowRecord(gage, gageRecordStart, gageRecordEnd, minRecordLength),
             pattern=map(gage),
             iteration='list'),
+  tar_target(gages_fixed, unlistGages(gage)),
 
   ## PREP BASIN DATA
   tar_target(basinData, buildBasinDataPackage(huc4)),
@@ -54,17 +57,17 @@ gageAnalysis <- tar_map(
             pattern=map(gage),
             iteration='list'),
 
-  ## UPSCALE TO RIVER NETWORK
+  ## UPSCALE TO RIVER NETWORK (12/20/24: to do: add resources arguments so that x number of cores are passed to each basin Analysis)
   tar_target(upscalingModel, buildUpscalingModel(huc4, gageRecord, gage, BHGmodel, depthAHG, minAHGr2, gageRecordStart, gageRecordEnd)),
   tar_target(basinModel, buildNetworkModel(huc4, upscalingModel, BHGmodel, basinData), deployment='main'),
   tar_target(basinAnalysis, runNetworkModel(huc4, basinData, basinModel), deployment='main'),
 
-  # ## HORTON SCALING TO CAPTURE INUNDATION IN STREAMS < 10M WIDE
+  ## HORTON SCALING TO CAPTURE INUNDATION IN STREAMS < 10M WIDE
   tar_target(hortonResults, hortonScaling(basinAnalysis, huc4)),
 
-  # ## VALIDATE AT REACHES WITH USGS INUNDATION MODELS
-#  tar_target(val_USGS, valModelUSGS(huc4, basinData, basinModel)),
+  ## VALIDATE AT REACHES WITH USGS INUNDATION MODELS
   tar_target(val_FEMA, valModelFEMA(huc4, preppedFEMA, basinAnalysis, basinData)),
+  tar_target(val_USGS, valModelUSGS(huc4, basinAnalysis, usgs_maps)),
 
   ## BASIN SPECIFIC FIGURES
   tar_target(upscalingPlot, upscalingFig(upscalingModel, huc4))
@@ -76,17 +79,19 @@ list(
   tar_target(BHGdata, dataBHG()),
   tar_target(BHGmodel, modelsBHG()),
 
-  ## PREP FEMA MAPS
+  ## PREP VALIDATION MAPS
   tar_target(preppedFEMA, prepFEMA()),
   
   ## RUN GAGE ANALYSIS (STATIC BRANCHED)
   gageAnalysis,
 
   ## COMBINE
-  tar_combine(gage_combined, gageAnalysis$gage, command = dplyr::bind_rows(!!!sf::st_drop_geometry(.x))),
-  #tar_combine(val_FEMA_combined, gageAnalysis$val_FEMA, command = dplyr::bind_rows(!!!.x)),
+  tar_combine(gage_combined, gageAnalysis$gages_fixed, command = dplyr::bind_rows(!!!.x)),
+  tar_combine(val_FEMA_combined, gageAnalysis$val_FEMA, command = dplyr::bind_rows(!!!.x)),
+  tar_combine(val_USGS_combined, gageAnalysis$val_USGS, command = dplyr::bind_rows(!!!.x)),
   tar_combine(hortonResults_combined, gageAnalysis$hortonResults, command = dplyr::bind_rows(!!!.x)),
 
   ## FIGURES
-  tar_target(valFEMAFig, makeValFEMA(val_FEMA_0108, gage_combined, BHGdata))
+  tar_target(valFEMAFig, makeValFEMA(val_FEMA_combined, gage_combined, BHGdata)),
+  tar_target(valUSGSFig, makeValUSGS(val_USGS_combined, BHGdata))
 )
