@@ -68,6 +68,7 @@ gageAnalysis <- tar_map(
   ## VALIDATE AT REACHES WITH USGS INUNDATION MODELS
   tar_target(val_FEMA, valModelFEMA(huc4, preppedFEMA, basinAnalysis, basinData)),
   tar_target(val_USGS, valModelUSGS(huc4, basinAnalysis, usgs_maps)),
+  tar_target(val_USGSvols, valModelUSGSvols(huc4, basinAnalysis, val_USGS, c('q0_2', 'q0_5', 'q1', 'q2', 'q4', 'q10', 'q20','q50', 'q80', 'q90', 'q96', 'q98', 'q99', 'q99_5', 'q99_8'))),
 
   ## BASIN SPECIFIC FIGURES
   tar_target(upscalingPlot, upscalingFig(upscalingModel, huc4))
@@ -89,9 +90,12 @@ list(
   tar_combine(gage_combined, gageAnalysis$gages_fixed, command = dplyr::bind_rows(!!!.x)),
   tar_combine(val_FEMA_combined, gageAnalysis$val_FEMA, command = dplyr::bind_rows(!!!.x)),
   tar_combine(val_USGS_combined, gageAnalysis$val_USGS, command = dplyr::bind_rows(!!!.x)),
+  tar_combine(val_USGSvols_combined, gageAnalysis$val_USGSvols, command = dplyr::bind_rows(!!!.x)),
+  
   tar_combine(hortonResults_combined, gageAnalysis$hortonResults, command = dplyr::bind_rows(!!!.x)),
 
   ## FIGURES
   tar_target(valFEMAFig, makeValFEMA(val_FEMA_combined, gage_combined, BHGdata)),
-  tar_target(valUSGSFig, makeValUSGS(val_USGS_combined, BHGdata))
+  tar_target(valUSGSareaFig, makeValUSGSarea(val_USGS_combined)),
+  tar_target(valUSGSvolFig, makeValUSGSvol(val_USGSvols_combined))
 )

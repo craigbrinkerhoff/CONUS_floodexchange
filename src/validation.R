@@ -72,11 +72,16 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis, basinData){
     #filter model for 100-yr AEP and reaches with modeled results (non-NA)
     basinAnalysis <- basinAnalysis %>%
         dplyr::filter(!(is.na(A_qFEMA_m2))) %>%
-        dplyr::select(c('NHDPlusID', 'GageID', 'Wb_m', 'LengthKM', 'A_qFEMA_m2', 'V_qFEMA_m2', 'Htf_qFEMA_m'))
+        dplyr::select(c('NHDPlusID', 'GageID', 'Wb_m', 'LengthKM', 'A_qFEMA_m2', 'V_qFEMA_m3', 'Htf_qFEMA_m'))
     
     #only keep model reaches that align with the fema maps
     basinAnalysis <- basinAnalysis %>%
         sf::st_filter(fema_shp, .predicate = sf::st_within) #Only keep model reaches that fall within the fema maps. FEMA maps are inconsistent in space, so we can really only validate in places where we know the entire model reach has been mapped by FEMA (to avoid conflating real false positives with incomplete FEMA maps)
+
+    #check for basins with no fema maps (unlikely but possible I suppose)
+    if(nrow(basinAnalysis)==0){
+        return(data.frame())
+    }
 
     #keep gage IDs for later
     gageLookup <- basinAnalysis %>%
@@ -92,7 +97,7 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis, basinData){
         sf::st_drop_geometry() %>%
         dplyr::group_by(NHDPlusID) %>%
         dplyr::summarise(A_qFEMA_m2 = sum(A_qFEMA_m2, na.rm=T),
-                        V_qFEMA_m3 = sum(V_qFEMA_m2, na.rm=T),
+                        V_qFEMA_m3 = sum(V_qFEMA_m3, na.rm=T),
                         Htf_qFEMA_m = mean(Htf_qFEMA_m, na.rm=T),
                         channel_area_km2=mean(((Wb_m/1000)*LengthKM)), #mean to pass through groupby
                         LengthKM = mean(LengthKM)) #mean to pass through groupby
@@ -142,11 +147,11 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis, basinData){
 valModelUSGS <- function(huc4id, basinAnalysis, usgs_maps){
     sf::sf_use_s2(FALSE)
 
-    #manual for now
+    #grab maps within our huc4
     usgs_maps <- usgs_maps %>%
         sf::st_transform(crs=sf::st_crs(4269)) %>% #just to make sure
         dplyr::mutate(key_exdprob = keyProb) %>%
-        dplyr::filter(huc4 == huc4id) #for now, set the exceedance probs manually for Green river
+        dplyr::filter(huc4 == huc4id)
 
     #prep
     huc2 <- substr(huc4id, 1, 2)
@@ -160,9 +165,14 @@ valModelUSGS <- function(huc4id, basinAnalysis, usgs_maps){
     basinAnalysis <- basinAnalysis %>%
         sf::st_filter(usgs_maps, .predicate = sf::st_within) #Only keep model reaches that fall within the usgs maps. These maps are inconsistent in space, so we can really only validate in places where we know the entire model reach has been mapped by USGS (to avoid conflating real false positives with incomplete USGS maps)
 
+    #check for basins with no usgs models
+    if(nrow(basinAnalysis)==0){
+        return(data.frame())
+    }
+
     #filter for modeled results given an exceedance probability
     basinAnalysis <- basinAnalysis %>%
-        tidyr::gather(key=key_exdprob, value=A_model_m2, c('A_q1_m2', 'A_q10_m2', 'A_q25_m2','A_q50_m2', 'A_q75_m2')) %>%
+        tidyr::gather(key=key_exdprob, value=A_model_m2, c('A_q0_2_m2', 'A_q0_5_m2', 'A_q1_m2', 'A_q2_m2', 'A_q4_m2', 'A_q10_m2', 'A_q20_m2','A_q50_m2', 'A_q80_m2', 'A_q90_m2', 'A_q96_m2', 'A_q98_m2', 'A_q99_m2', 'A_q99_5_m2', 'A_q99_8_m2')) %>%
         dplyr::mutate(key_exdprob = substr(key_exdprob, 1,nchar(key_exdprob)-3)) %>%
         dplyr::select(c('NHDPlusID', 'GageID', 'key_exdprob', 'Wb_m', 'LengthKM', 'A_model_m2'))
 
@@ -206,6 +216,99 @@ valModelUSGS <- function(huc4id, basinAnalysis, usgs_maps){
         dplyr::relocate(GageID, .after=NHDPlusID) %>%
         dplyr::relocate(key_exdprob, .after=NHDPlusID) %>%
         tidyr::drop_na(A_usgs_km2) #a few edge cases where  fema shp is 0 km2, but just brushes against model catchment and intersects --> NA usgs area. SO remove them.
+    
+    return(out)
+}
+
+
+
+
+
+
+valModelUSGSvols <- function(huc4id, basinAnalysis_orig, val_USGS, modeled_flow_values){
+    sf::sf_use_s2(FALSE)
+
+    huc2 <- substr(huc4id, 1, 2)
+
+    #read in huc4 catchments
+    unit_catchments <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'),
+                                    layer = 'NHDPlusCatchment',
+                                    quiet = TRUE) %>%
+        dplyr::filter(NHDPlusID %in% val_USGS$NHDPlusID)
+    
+    unit_catchments_terra <- terra::vect(unit_catchments)
+
+    #construct depths for each usgs map within our huc4
+    files <- list.files(paste0('data/path_to_data/CONUS_connectivity_data/USGS_models/depth_grids/', huc4id, '/'), full=TRUE, pattern = "\\.tif$")
+    files_short <- list.files(paste0('data/path_to_data/CONUS_connectivity_data/USGS_models/depth_grids/', huc4id, '/'), full=FALSE, pattern = "\\.tif$")
+
+    #check for basins with no vol data
+    if(length(files)==0){
+        return(data.frame())
+    }
+
+    out <- data.frame()
+    for(i in files){
+        #get exd prob
+        filename <- files_short[which(files==i)]
+        exdprob <- stringr::str_match(filename, "_\\s*(.*?)\\s*.tif")[1,2]
+
+        #if our model doesn't produce the raster's flow probability, skip
+        if(!(exdprob %in% modeled_flow_values)){
+            next
+        }
+
+        grid_d <- terra::rast(i)
+        grid_d <- terra::project(grid_d, "epsg:4269")
+        grid_d <- grid_d * 0.3048 #ft to m
+        grid_a <- terra::cellSize(grid_d, unit="m", transform=TRUE)
+
+        grid_v <- grid_d * grid_a #m3
+        vols <- terra::extract(grid_v, unit_catchments_terra, fun=function(x){sum(x, na.rm=T)})
+        vols <- vols[,2]
+
+        # depths <- terra::extract(grid, unit_catchments_terra, fun=function(x){sum(x, na.rm=T)})
+        # depths <- depths[,2] * 0.3048 #ft to m
+
+        # areas <- terra::extract(grid_a, unit_catchments_terra, fun=function(x){sum(x, na.rm=T)})
+        # areas <- areas[,2] #already in m2
+        
+        df <- data.frame('NHDPlusID'=unit_catchments$NHDPlusID,
+                        'key_exdprob'=paste0('V_',exdprob),
+                        'V_usgs_m3'=vols)
+        
+                # df <- data.frame('NHDPlusID'=unit_catchments$NHDPlusID,
+                #         'key_exdprob'=paste0('A_',exdprob),
+                #         'D_usgs_m'=depths)
+
+        #get modeled results
+        basinAnalysis <- basinAnalysis_orig %>%
+            sf::st_drop_geometry() %>%
+            dplyr::filter(NHDPlusID %in% val_USGS$NHDPlusID) %>%
+            tidyr::gather(key=key_exdprob, value=V_model_m3, c('V_q0_2_m3', 'V_q0_5_m3', 'V_q1_m3', 'V_q2_m3', 'V_q4_m3', 'V_q10_m3', 'V_q20_m3','V_q50_m3', 'V_q80_m3', 'V_q90_m3', 'V_q96_m3', 'V_q98_m3', 'V_q99_m3', 'V_q99_5_m3', 'V_q99_8_m3')) %>%
+            dplyr::mutate(key_exdprob = substr(key_exdprob, 1,nchar(key_exdprob)-3)) %>%
+            dplyr::mutate(V_model_km3 = V_model_m3 * 1e-9) %>%
+            dplyr::select(c('NHDPlusID', 'GageID', 'key_exdprob', 'Wb_m', 'LengthKM', 'V_model_km3'))
+
+        usgs_lookup <- df %>%
+            dplyr::mutate(V_usgs_km3 = V_usgs_m3 * 1e-9, #A_usgs_m2 * D_usgs_m * 1e-9,
+                        key_exdprob = paste0('V', substr(key_exdprob, 2, nchar(key_exdprob)))) %>%
+            dplyr::select(c('NHDPlusID', 'key_exdprob', 'V_usgs_km3'))
+
+        # model_lookup <- val_USGS %>%
+        #     dplyr::left_join(df, by=c('NHDPlusID', 'key_exdprob')) %>%
+        #     dplyr::mutate(V_usgs_km3 = A_usgs_km2 * (D_usgs_m*1e-3),
+        #                 key_exdprob = paste0('V', substr(key_exdprob, 2, nchar(key_exdprob)))) %>%
+        #     dplyr::select(c('huc4', 'NHDPlusID', 'key_exdprob', 'V_usgs_km3'))
+
+        out_loop <- usgs_lookup %>%
+            dplyr::left_join(basinAnalysis, by=c('NHDPlusID', 'key_exdprob')) %>%
+            dplyr::filter(key_exdprob %in% paste0('V_', substr(df$key_exdprob, 3, nchar(df$key_exdprob)))) %>%
+            dplyr::mutate(huc4 = huc4id) %>%
+            dplyr::select(c('huc4', 'NHDPlusID', 'key_exdprob', 'GageID', 'V_model_km3', 'V_usgs_km3'))
+        
+        out <- rbind(out, out_loop)
+    }
     
     return(out)
 }

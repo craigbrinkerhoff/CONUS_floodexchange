@@ -117,30 +117,30 @@ makeValFEMA <- function(val_FEMA_combined, gage_combined, BHGdata){
 
 
 
-makeValUSGS <- function(val_USGS_combined, BHGdata){
+makeValUSGSarea <- function(val_USGS_combined){
     library(ggplot2)
     theme_set(theme_classic())
 
     #make inundated area val df
     val_USGS_area <- val_USGS_combined %>%
         sf::st_drop_geometry() %>%
-        dplyr::filter(A_usgs_km2 > 0 & A_model_km2 > 0)
+        dplyr::filter(A_usgs_km2 > 0 & A_model_km2 > 0) %>%
+        dplyr::mutate(plot_var = factor(key_exdprob, c('A_q0_2', 'A_q0_5', 'A_q1', 'A_q2', 'A_q4', 'A_q10', 'A_q20', 'A_q50'), labels=c('0.2% flood', '0.5% flood', '1% flood', '2% flood', '4% flood', '10% flood', '20% flood', '50% flood')))
 
     lm_inn_a <- lm(log(A_model_km2)~log(A_usgs_km2), data=val_USGS_area)
-    # lm_flood <- lm(log(Af_model_km2)~log(Af_usgs_km2), data=val_USGS_area_fp)
 
     #get r2 and num reaches for each characteristic flood
     df_r2 <- val_USGS_area %>%
-        dplyr::group_by(key_exdprob) %>%
+        dplyr::group_by(plot_var) %>%
         dplyr::group_modify(~ broom::glance(lm(log10(A_model_km2) ~ log10(A_usgs_km2), data = .x))) %>% 
-        dplyr::select(c('key_exdprob', 'r.squared'))
+        dplyr::select(c('plot_var', 'r.squared'))
     
     df_num <- val_USGS_area %>%
-        dplyr::group_by(key_exdprob) %>%
+        dplyr::group_by(plot_var) %>%
         dplyr::summarise(n=n())
     
     lookup <- df_r2 %>%
-        dplyr::left_join(df_num, by='key_exdprob') %>%
+        dplyr::left_join(df_num, by='plot_var') %>%
         dplyr::mutate(r2fin = sprintf("italic(R^2) == %.2f", r.squared),
                     nfin = paste0(n, ' reaches'))
 
@@ -148,7 +148,6 @@ makeValUSGS <- function(val_USGS_combined, BHGdata){
     scatter_area <- ggplot(val_USGS_area, aes(x=A_usgs_km2*1e6, y=A_model_km2*1e6))+
         geom_point(size=5, color='#9a8c98') +
         geom_abline(linewidth=2, color='darkgrey', linetype='dashed') +
-      #  scale_color_brewer(palette='Dark2', name='Flood percentiles', labels=c('1%', '10%', '50%'))+
         geom_smooth(color='black', method='lm', se=F, linewidth=1.25) +
         scale_x_log10(guide = "axis_logticks", limits=c(1e1, 1e7), breaks=c(1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7), labels = scales::label_log(base=10))+
         scale_y_log10(guide = "axis_logticks", limits=c(1e1, 1e7), breaks=c(1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7), labels = scales::label_log(base=10))+
@@ -156,30 +155,77 @@ makeValUSGS <- function(val_USGS_combined, BHGdata){
         ylab(bquote(bold("Modeled inundated area ["*m^2*"]"))) +
         theme(axis.title = element_text(face = 'bold', size=18),
             axis.text = element_text(size=15),
-           # legend.position=c(0.8,0.15),
             strip.text = element_text(size=22),
             axis.line = element_blank(),
             panel.grid.major = element_blank(),
             panel.grid.minor = element_blank(),
             strip.background = element_blank(),
             panel.border = element_rect(colour = "black", fill = NA)) +
-    #    # labs(title='A')+
-    #     annotate("text", y = 10^6.5, x = 10^2.5, label = bquote(.(length(unique(val_USGS_area$NHDPlusID)))*' river reaches'), size=6)+
-    #     annotate("text", y = 10^6, x = 10^2.5, label = bquote(r^2*': '*.(round(summary(lm_inn_a)$r.squared,2))), size=6) +
-        facet_wrap(vars(key_exdprob), nrow=2, labeller = labeller(key_exdprob = ~ paste0(substr(.x, 4, nchar(.x)),'% flood'))) +
+        facet_wrap(vars(plot_var), nrow=2) +
         geom_text(x=2, y=6, aes(label=r2fin), data=lookup, parse=TRUE, size=5)+
         geom_text(x=2, y=6.5, aes(label=nfin), data=lookup, size=5)
-    
-    # layout <- "
-    #     A
-    #     B
-    # "
 
-    # comboPlot <- patchwork::wrap_plots(A=scatter_area, design=layout) #B=scatter_area_fp, 
-
-    ggsave('cache/validationUSGS.png', scatter_area, width=10, height=10)#width=6, height=12)
+    ggsave('cache/validationUSGS_area.png', scatter_area, width=16, height=10)#width=6, height=12)
 
     return(val_USGS_combined)
+}
+
+
+
+
+
+
+makeValUSGSvol <- function(val_USGSvols_combined){
+    library(ggplot2)
+    theme_set(theme_classic())
+
+    #make inundated area val df
+    val_USGS_vol <- val_USGSvols_combined %>%
+        sf::st_drop_geometry() %>%
+        dplyr::filter(V_usgs_km3 > 0 & V_model_km3 > 0) %>%
+        dplyr::mutate(plot_var = factor(key_exdprob, c('V_q0_2', 'V_q0_5', 'V_q1', 'V_q2', 'V_q4', 'V_q10', 'V_q20', 'V_q50'), labels=c('0.2% flood', '0.5% flood', '1% flood', '2% flood', '4% flood', '10% flood', '20% flood', '50% flood')))
+
+    lm_inn_a <- lm(log(V_model_km3)~log(V_usgs_km3), data=val_USGS_vol)
+
+    #get r2 and num reaches for each characteristic flood
+    df_r2 <- val_USGS_vol %>%
+        dplyr::group_by(plot_var) %>%
+        dplyr::group_modify(~ broom::glance(lm(log10(V_model_km3) ~ log10(V_usgs_km3), data = .x))) %>% 
+        dplyr::select(c('plot_var', 'r.squared'))
+    
+    df_num <- val_USGS_vol %>%
+        dplyr::group_by(plot_var) %>%
+        dplyr::summarise(n=n())
+    
+    lookup <- df_r2 %>%
+        dplyr::left_join(df_num, by='plot_var') %>%
+        dplyr::mutate(r2fin = sprintf("italic(R^2) == %.2f", r.squared),
+                    nfin = paste0(n, ' reaches'))
+
+    #plot
+    scatter_vol <- ggplot(val_USGS_vol, aes(x=V_usgs_km3*1e9, y=V_model_km3*1e9))+
+        geom_point(size=5, color='#a39171') +
+        geom_abline(linewidth=2, color='darkgrey', linetype='dashed') +
+        geom_smooth(color='black', method='lm', se=F, linewidth=1.25) +
+        scale_x_log10(guide = "axis_logticks", limits=c(1e2, 1e7), breaks=c(1e2, 1e3, 1e4, 1e5, 1e6, 1e7), labels = scales::label_log(base=10))+
+        scale_y_log10(guide = "axis_logticks", limits=c(1e2, 1e7), breaks=c(1e2, 1e3, 1e4, 1e5, 1e6, 1e7), labels = scales::label_log(base=10))+
+        xlab(bquote(bold("USGS-hydrodynamic inundated volume ["*m^3*"]"))) +
+        ylab(bquote(bold("Modeled inundated volume ["*m^3*"]"))) +
+        theme(axis.title = element_text(face = 'bold', size=18),
+            axis.text = element_text(size=15),
+            strip.text = element_text(size=22),
+            axis.line = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            strip.background = element_blank(),
+            panel.border = element_rect(colour = "black", fill = NA)) +
+        facet_wrap(vars(plot_var), nrow=2)+
+        geom_text(x=3, y=6, aes(label=r2fin), data=lookup, parse=TRUE, size=5)+
+        geom_text(x=3, y=6.5, aes(label=nfin), data=lookup, size=5)
+
+    ggsave('cache/validationUSGS_vol.png', scatter_vol, width=16, height=10)
+
+    return(val_USGSvols_combined)
 }
 
 
@@ -213,12 +259,12 @@ upscalingFig <- function(df, huc4){
             panel.grid.minor = element_blank(),
             strip.background = element_blank(),
             panel.border = element_rect(colour = "black", fill = NA)) +
-        facet_wrap(~factor(name, levels=c('qFEMAflood_Htf_m', 'q1flood_Htf_m', 'q10flood_Htf_m', 'q25flood_Htf_m', 'q50flood_Htf_m', 'q75flood_Htf_m'),
-                                labels=c('100yr AEP flood', '1% flood', '10% flood', '25% flood', '50% flood', '75% flood'))) +
+        facet_wrap(~factor(name, levels=c('qFEMAflood_Htf_m', 'q0_2flood_Htf_m', 'q0_5flood_Htf_m', 'q1flood_Htf_m', 'q2flood_Htf_m', 'q4flood_Htf_m', 'q10flood_Htf_m', 'q20flood_Htf_m', 'q50flood_Htf_m', 'q80flood_Htf_m', 'q90flood_Htf_m', 'q96flood_Htf_m', 'q98flood_Htf_m', 'q99flood_Htf_m', 'q99_5flood_Htf_m', 'q99_8flood_Htf_m'),
+                                labels=c('100yr AEP flood', '0.2% flood', '0.5% flood', '1% flood', '2% flood', '4% flood', '10% flood', '20% flood', '50% flood', '80% flood', '90% flood', '96% flood', '98% flood', '99% flood', '99.5% flood', '99.8% flood'))) +
         geom_text(x=0.05, y=0.95, data = forLabels, aes(label = r2fin), size=6, parse=TRUE) +
         geom_text(x=0.05, y=0.8, data = forLabels, aes(label = nfin), size=6)
   
-  ggsave(paste0('cache/upscalingModel_', huc4, '.png'), plot, width=12, height=10)
+  ggsave(paste0('cache/upscalingModel_', huc4, '.png'), plot, width=14, height=14)
 
   return(paste0('cache/upscalingModel_', huc4, '.png'))
 }
