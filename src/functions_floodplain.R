@@ -597,7 +597,11 @@ buildNetworkModel <- function(huc4, upscalingModel, BHGmodel, basinData) {
     sf::st_zm() %>%
     dplyr::left_join(network_VAA, by='NHDPlusID') %>%
     dplyr::left_join(network_gages, by='NHDPlusID') %>%
-    dplyr::select(c('NHDPlusID', 'GageID','StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope', 'Shape'))
+    dplyr::select(c('NHDPlusID', 'WBArea_Permanent_Identifier', 'GageID','StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope', 'Shape'))
+  
+  #remove impossible flowlines with no drainage area or divergent starting reaches (streamalc == 0; see pg. 45 at https://pubs.usgs.gov/of/2019/1096/ofr20191096.pdf)
+  network <- network %>%
+    dplyr::filter(AreaSqKm > 0 & TotDASqKm > 0 & StreamCalc > 0) 
   
   huc4id <- huc4
   basin <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU4.shp')) %>%
@@ -641,16 +645,30 @@ buildNetworkModel <- function(huc4, upscalingModel, BHGmodel, basinData) {
     dplyr::relocate(Shape, .after=tidyselect::last_col())
   
   #add reach type
-  lookup <- basinData$waterbodyLookUp %>%
-    dplyr::filter(!(is.na(NHDPlusID_reach))) %>%
-    dplyr::select(c('NHDPlusID_reach', 'waterbody_type'))
-
+  waterbodies <-  sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
+                              layer = 'NHDWaterbody',
+                              quiet = TRUE) %>%
+    sf::st_drop_geometry() %>%
+    dplyr::select(c('Permanent_Identifier', 'FType', 'AreaSqKm'))
+    colnames(waterbodies) <- c('Permanent_Identifier', 'FType', 'WBAreaSqKm')
+    
   network <- network %>%
-    dplyr::left_join(lookup, by=c('NHDPlusID'='NHDPlusID_reach'))
-  network$waterbody_type <- ifelse(is.na(network$waterbody_type), 'floodplain',
-                                ifelse(network$waterbody_type == '466', 'wetland',
-                                    ifelse(network$waterbody_type == '436', 'reservoir',
-                                         ifelse(network$waterbody_type == '390', 'lake', 'other'))))
+    dplyr::left_join(waterbodies, by=c('WBArea_Permanent_Identifier'='Permanent_Identifier')) %>%
+    dplyr::mutate(waterbody_type = ifelse(FType %in% c('436', '390') & WBAreaSqKm > 0, 'lake/reservoir', 'river')) %>% #to be a waterbody, must have an area > 0
+    dplyr::relocate(WBArea_Permanent_Identifier, .after=waterbody_type) %>%
+    dplyr::relocate(WBAreaSqKm, .after=WBArea_Permanent_Identifier) %>%
+    dplyr::select(!FType)
+
+  # lookup <- basinData$waterbodyLookUp %>%
+  #   dplyr::filter(!(is.na(NHDPlusID_reach))) %>%
+  #   dplyr::select(c('NHDPlusID_reach', 'waterbody_type'))
+
+  # network <- network %>%
+  #   dplyr::left_join(lookup, by=c('NHDPlusID'='NHDPlusID_reach'))
+  # network$waterbody_type <- ifelse(is.na(network$waterbody_type), 'floodplain',
+  #                               ifelse(network$waterbody_type == '466', 'wetland',
+  #                                   ifelse(network$waterbody_type == '436', 'reservoir',
+  #                                        ifelse(network$waterbody_type == '390', 'lake', 'other'))))
   
   return(network)
 }
@@ -660,13 +678,13 @@ buildNetworkModel <- function(huc4, upscalingModel, BHGmodel, basinData) {
 
 runNetworkModel <- function(huc4, basinData, network){
   #setup basin shapefiles
-  dem <- terra::unwrap(basinData$terra$dem) #[cm] need to unwrap the packed terra package (for distributed computing)
-  d8 <- terra::unwrap(basinData$terra$d8) #[cm] need to unwrap the packed terra package (for distributed computing)
+  dem <- terra::unwrap(basinData$dem) #[cm] need to unwrap the packed terra package (for distributed computing)
+  d8 <- terra::unwrap(basinData$d8) #[cm] need to unwrap the packed terra package (for distributed computing)
 
   #run embarresingly parallel inundation model
   inundationWrapper <- function(reach) {
     #lower bound on dem resolution (also, these small rivers don't reallllly have floodplains, right?)
-    if(reach$Wb_m <= 10 | reach$waterbody_type == 'lake'){
+    if(reach$Wb_m <= 10 | reach$waterbody_type == 'lake/reservoir'){
       reach[,c('A_qFEMA_m2', 'A_q0_2_m2', 'A_q0_5_m2', 'A_q1_m2', 'A_q2_m2', 'A_q4_m2', 'A_q10_m2', 'A_q20_m2', 'A_q50_m2', 'A_q80_m2', 'A_q90_m2', 'A_q96_m2', 'A_q98_m2', 'A_q99_m2', 'A_q99_5_m2', 'A_q99_8_m2')] <-NA
       reach[,c('V_qFEMA_m3', 'V_q0_2_m3', 'V_q0_5_m3', 'V_q1_m3', 'V_q2_m3', 'V_q4_m3', 'V_q10_m3', 'V_q20_m3', 'V_q50_m3', 'V_q80_m3', 'V_q90_m3', 'V_q96_m3', 'V_q98_m3', 'V_q99_m3', 'V_q99_5_m3', 'V_q99_8_m3')] <- NA
       return(reach)
@@ -754,10 +772,77 @@ runNetworkModel <- function(huc4, basinData, network){
 
 
 
-hortonScaling <- function(basinAnalysis, huc4){
+# biasCorrectModel <- function(val_FEMA, basinAnalysis){
+#   val_FEMA_area <- val_FEMA %>%
+#     sf::st_drop_geometry() %>%
+#     dplyr::filter(A_femaAEP_km2 > 0 & A_qFEMA_km2 > 0)
+
+#   bias_correct <- Metrics::bias(log(val_FEMA_area$A_qFEMA_km2), log(val_FEMA_area$A_femaAEP_km2))
+
+#   for_area <- basinAnalysis %>%
+#     sf::st_drop_geometry()%>%
+#     dplyr::select(c('NHDPlusID', c('A_q0_2_m2', 'A_q0_5_m2', 'A_q1_m2', 'A_q2_m2', 'A_q4_m2', 'A_q10_m2', 'A_q20_m2', 'A_q50_m2', 'A_q80_m2', 'A_q90_m2', 'A_q96_m2', 'A_q98_m2', 'A_q99_m2', 'A_q99_5_m2', 'A_q99_8_m2')))%>%
+#     tidyr::pivot_longer(c('A_q0_2_m2', 'A_q0_5_m2', 'A_q1_m2', 'A_q2_m2', 'A_q4_m2', 'A_q10_m2', 'A_q20_m2', 'A_q50_m2', 'A_q80_m2', 'A_q90_m2', 'A_q96_m2', 'A_q98_m2', 'A_q99_m2', 'A_q99_5_m2', 'A_q99_8_m2'), names_to="perc", values_to="area_m2") %>%
+#     dplyr::mutate(perc = substr(perc, 3, nchar(perc)-3))  
+
+#   for_vol <- basinAnalysis %>%
+#     sf::st_drop_geometry()%>%
+#     dplyr::select(c('NHDPlusID', 'V_q0_2_m3', 'V_q0_5_m3', 'V_q1_m3', 'V_q2_m3', 'V_q4_m3', 'V_q10_m3', 'V_q20_m3', 'V_q50_m3', 'V_q80_m3', 'V_q90_m3', 'V_q96_m3', 'V_q98_m3', 'V_q99_m3', 'V_q99_5_m3', 'V_q99_8_m3'))%>%
+#     tidyr::pivot_longer(c('V_q0_2_m3', 'V_q0_5_m3', 'V_q1_m3', 'V_q2_m3', 'V_q4_m3', 'V_q10_m3', 'V_q20_m3', 'V_q50_m3', 'V_q80_m3', 'V_q90_m3', 'V_q96_m3', 'V_q98_m3', 'V_q99_m3', 'V_q99_5_m3', 'V_q99_8_m3'), names_to="perc", values_to="vol_m3") %>%
+#     dplyr::mutate(perc = substr(perc, 3, nchar(perc)-3))
+
+#   for_biascorrect <- for_area %>%
+#     dplyr::left_join(for_vol, by=c('NHDPlusID', 'perc'))
+
+#    models_r2 <- for_biascorrect %>%
+#     dplyr::group_by(perc) %>%
+#     dplyr::mutate(broom::glance(lm(log(vol_m3) ~ log(area_m2)))) %>%
+#     dplyr::summarise(n=sum(!(is.na(vol_m3))),
+#                     rsq = mean(adj.r.squared, na.rm=T)) %>% #mean to pass the constant through
+#     dplyr::select(c(perc, n, rsq))
+
+#   models <- for_biascorrect %>%
+#     dplyr::group_by(perc) %>%
+#     dplyr::group_modify(~ broom::tidy(lm(log(vol_m3) ~ log(area_m2), data = .x))) %>%
+#     dplyr::select(perc:std.error) %>%
+#     dplyr::left_join(models_r2, by='perc') %>%
+#     tidyr::pivot_wider(names_from=term, values_from=c(estimate, std.error, n, rsq)) %>%
+#     dplyr::select(c('perc', 'estimate_(Intercept)','estimate_log(area_m2)', 'std.error_(Intercept)', 'std.error_log(area_m2)', 'n_(Intercept)', 'rsq_(Intercept)'))
+
+#   for_biascorrect <- for_biascorrect %>%
+#     dplyr::left_join(models, by='perc') %>%
+#     dplyr::mutate(A_model_m2_biascorrected = exp(log(area_m2)+bias_correct)) %>%
+#     dplyr::mutate(V_model_m3_biascorrect = exp(`estimate_(Intercept)`)*A_model_m2_biascorrected^`estimate_log(area_m2)`) %>%
+#     dplyr::select(c('NHDPlusID', 'perc', 'A_model_m2_biascorrected', 'V_model_m3_biascorrect')) %>%
+#     dplyr::mutate(area_perc = paste0('A_',perc, '_bc_m2'),
+#                 vol_perc = paste0('V_',perc, '_bc_m3'))
+
+#   for_area_fin <- for_biascorrect %>%
+#     dplyr::select(c('NHDPlusID', 'area_perc', 'A_model_m2_biascorrected')) %>%
+#     tidyr::pivot_wider(names_from = 'area_perc', values_from='A_model_m2_biascorrected')
+
+#   for_vol_fin <- for_biascorrect %>%
+#       dplyr::select(c('NHDPlusID', 'vol_perc', 'V_model_m3_biascorrect')) %>%
+#       tidyr::pivot_wider(names_from = 'vol_perc', values_from='V_model_m3_biascorrect')
+  
+
+#   #add bias corrected results to model df
+#   basinAnalysis <- basinAnalysis %>%
+#     dplyr::left_join(for_area_fin, by='NHDPlusID') %>%
+#     dplyr::left_join(for_vol_fin, by='NHDPlusID')
+  
+
+#   return(basinAnalysis)
+# }
+
+
+
+hortonScaling <- function(basinAnalysis, huc4, flag){
+  basinAnalysis <- basinAnalysis %>%
+    dplyr::filter(barrier_flag == flag)
+
   scaledBasin <- basinAnalysis %>%
     sf::st_drop_geometry() %>%
-    dplyr::filter(StreamCalc > 0)  %>%  #RERUN WHOLE ANALYSIS WITH THIS REMOVED
     dplyr::group_by(StreamCalc) %>% 
     dplyr::summarise(Af_by_order = sum(A_q1_m2 - (Wb_m*LengthKM*1000), na.rm=T),
                     A_by_order = sum(A_q1_m2, na.rm=T),
@@ -783,11 +868,115 @@ hortonScaling <- function(basinAnalysis, huc4){
   #prep output
   scaledBasin <- scaledBasin %>%
     dplyr::mutate('huc4'=huc4,
+                'barrier_flag'=flag,
                 'Hf_avg_by_order_cm_fin'=(Vf_by_order_km3_fin / Af_by_order_km2_fin / (Af_by_order_km2_fin*1e6/100))*100000, #100m2 cell size
                 'area_model_r2'=summary(area_model)$r.squared,
                 'vol_model_r2'=summary(vol_model)$r.squared,
                 'vol_all_model_r2'=summary(vol_model_all)$r.squared) %>%
-    dplyr::select(c('huc4', 'StreamCalc', 'frac', 'area_model_r2', 'vol_model_r2', 'vol_all_model_r2', 'Af_by_order_km2_fin', 'Vf_by_order_km3_fin', 'V_by_order_km3_fin', 'Hf_avg_by_order_cm_fin'))
+    dplyr::select(c('huc4', 'barrier_flag', 'StreamCalc', 'frac', 'area_model_r2', 'vol_model_r2', 'vol_all_model_r2', 'Af_by_order_km2_fin', 'Vf_by_order_km3_fin', 'V_by_order_km3_fin', 'Hf_avg_by_order_cm_fin'))
 
   return(scaledBasin)
+}
+
+
+
+
+regulateFlooding <- function(basinAnalysis, barriers, area_thresh_perc, huc4id, snapping_thresh){
+  huc2 <- substr(huc4id, 1, 2)
+
+  network_VAA <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusFlowlineVAA', quiet=TRUE) %>%
+    dplyr::select(c('NHDPlusID', 'TotDASqKm', 'ToNode', 'FromNode'))
+
+  basins <- basinAnalysis
+
+  basins <- basins %>%
+    dplyr::left_join(network_VAA, by='NHDPlusID')
+
+  basins_all <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'),layer = 'NHDFlowline',quiet = TRUE) %>%
+    dplyr::left_join(network_VAA, by='NHDPlusID')
+
+  huc_shp <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU4.shp')) %>%
+     dplyr::filter(huc4 == huc4id)
+
+  #join Global Dam Watch Database to nhd
+  barriers <- sf::st_read('data/path_to_data/CONUS_sediment_data/GDW_barriers_v1_0.shp') %>%
+    dplyr::filter(INSTREAM == 'Instream') %>%
+    sf::st_transform(crs=sf::st_crs(basins_all)) %>%
+    sf::st_crop(huc_shp) %>%
+    dplyr::select(c('GDW_ID', 'DAM_NAME', 'MAIN_USE', 'CATCH_SKM'))
+
+  buffered_barriers <- barriers %>%
+    sf::st_buffer(snapping_thresh)
+  
+  barriers_fin <- buffered_barriers %>%
+    sf::st_join(basins_all) %>%
+    sf::st_drop_geometry() %>%
+    dplyr::filter(abs(CATCH_SKM-TotDASqKm)/CATCH_SKM <= area_thresh_perc & is.na(CATCH_SKM)==0) %>%
+    dplyr::group_by(GDW_ID) %>% 
+    dplyr::slice_min(abs(CATCH_SKM-TotDASqKm)/CATCH_SKM) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(c('GDW_ID', 'NHDPlusID', 'CATCH_SKM'))
+  
+    #sf::st_nearest_feature(basins_all)
+ # distances <- sf::st_distance(barriers, basins_all[nearest_feature,], by_element = TRUE)
+
+  # barriers$NHDPlusID <- basins_all[nearest_feature,]$NHDPlusID
+  # barriers$nhd_dist_m <- distances
+
+  # barriers <- barriers %>%
+  #   sf::st_drop_geometry() %>%
+  #   dplyr::filter(as.numeric(nhd_dist_m) <= snapping_thresh)
+
+  #runs asynchrounsouly for reach i using doparallel
+  effContrbWrapper <- function(basin, basins_all){
+    #crawl upstream to find reservoir drainage areas
+    ids_vec <- basin$FromNode
+    lookup <- data.frame()
+    while(length(ids_vec)> 0){
+      up_basins <- basins_all %>%
+        sf::st_drop_geometry() %>%
+        dplyr::filter(ToNode %in% ids_vec) %>%
+        dplyr::left_join(barriers_fin, by='NHDPlusID') %>%
+        dplyr::group_by(NHDPlusID) %>% #can have multiple dams on a reach, so just keep the most downstream one (see next line)
+        dplyr::slice_max(CATCH_SKM) %>%
+        dplyr::ungroup() %>%
+        dplyr::mutate(RESV_CATCH_SKM = ifelse(is.na(CATCH_SKM), 0, CATCH_SKM))
+      
+      #if a reservoir is found, store that catchment area away and stop crawling that part of the network
+      if(sum(up_basins$RESV_CATCH_SKM, na.rm=T) > 0){
+          temp <- up_basins %>%
+            dplyr::filter(RESV_CATCH_SKM > 0) %>%
+            dplyr::select(c('FromNode', 'RESV_CATCH_SKM'))#, 'MAIN_USE'))
+          lookup <- rbind(lookup, temp)
+
+          #remove that basin from the list of crawling basins
+          up_basins <- up_basins %>%
+            dplyr::filter(RESV_CATCH_SKM == 0)
+        }
+      ids_vec <- up_basins$FromNode
+    }
+
+    # lookup <- lookup %>%
+    #   dplyr::group_by(MAIN_USE) %>%
+    #   dplyr::summarise(regulatedDA_skm = sum(RESV_CATCH_SKM, na.rm=T)) %>%
+    #   tidyr::spread(key=MAIN_USE, value=regulatedDA_skm)
+      
+    # colnames(lookup) <- paste0('regulatedDA_skm_', colnames(lookup))
+    
+    # basin <- cbind(basin, lookup)
+
+    basin$regulatedDA_skm <- sum(lookup$RESV_CATCH_SKM, na.rm=T)
+
+    return(basin)
+  }
+
+    library(plyr)
+    library(doParallel)
+    registerDoParallel(cores=detectCores()-2)
+
+    basin_list <- setNames(split(basins, seq(nrow(basins))), rownames(basins))
+    result <- llply(basin_list, effContrbWrapper, basins_all, .parallel=TRUE)
+    basins_fin <- dplyr::bind_rows(result)
+
+  return(basins_fin)
 }

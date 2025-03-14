@@ -138,25 +138,26 @@ buildBasinDataPackage <- function(huc4) {
   
   
   #build waterbody type lookup table
-  sf::sf_use_s2(FALSE)
-  waterbodies <-  sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
-                              layer = 'NHDWaterbody',
-                              quiet = TRUE) %>%
-    sf::st_zm()
-  waterbodies <- fixGeometries(waterbodies)
-  flowlines <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
-                              layer = 'NHDFlowline',
-                              quiet = TRUE) %>%
-    sf::st_zm()
-  flowlines <- fixGeometries(flowlines)
-  waterbodies_fin <- sf::st_join(waterbodies, flowlines, join=sf::st_contains, largest=TRUE)
+  # sf::sf_use_s2(FALSE)
+  # waterbodies <-  sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
+  #                             layer = 'NHDWaterbody',
+  #                             quiet = TRUE) %>%
+  #   sf::st_zm()
+  # waterbodies <- fixGeometries(waterbodies)
+  # flowlines <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
+  #                             layer = 'NHDFlowline',
+  #                             quiet = TRUE) %>%
+  #   sf::st_zm()
+  # flowlines <- fixGeometries(flowlines)
+  # waterbodies_fin <- sf::st_join(waterbodies, flowlines, join=sf::st_contains, largest=TRUE)
   
-  waterbodyLookUp <- data.frame('NHDPlusID_reach'=waterbodies_fin$NHDPlusID.y,
-                                'NHDPlusID_polygon'=waterbodies_fin$NHDPlusID.x,
-                                'waterbody_type'=as.character(waterbodies_fin$FType.x))
+  # waterbodyLookUp <- data.frame('NHDPlusID_reach'=waterbodies_fin$NHDPlusID.y,
+  #                               'NHDPlusID_polygon'=waterbodies_fin$NHDPlusID.x,
+  #                               'waterbody_type'=as.character(waterbodies_fin$FType.x))
   
-  return(list('terra'=outlist,
-              'waterbodyLookUp'=waterbodyLookUp))
+  # return(list('terra'=outlist,
+  #             'waterbodyLookUp'=waterbodyLookUp))
+  return('terra'=outlist)
 }
 
 
@@ -164,4 +165,33 @@ buildBasinDataPackage <- function(huc4) {
 unlistGages <- function(gage_list){
   df <- dplyr::bind_rows(gage_list)
   return(df)
+}
+
+
+
+
+prepGWD <- function(){
+    #prep barriers dataset
+    states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
+    states <- dplyr::filter(states, !(NAME %in% c('Alaska',
+                                                'American Samoa',
+                                                'Commonwealth of the Northern Mariana Islands',
+                                                'Guam',
+                                                'District of Columbia',
+                                                'Puerto Rico',
+                                                'United States Virgin Islands',
+                                                'Hawaii'))) #remove non CONUS states/territories
+
+    states <- sf::st_union(states) %>%
+        sf::st_transform(crs=sf::st_crs(4326))
+
+    #append dam drainage areas via the GDW (Global Dam Watch database- https://www.globaldamwatch.org/database)
+    barriers <- sf::st_read('data/path_to_data/CONUS_sediment_data/GDW_barriers_v1_0.shp') %>%
+        sf::st_intersection(states) %>%
+        dplyr::filter(INSTREAM == 'Instream') %>% #remove offstream barriers not on hydrosheds/hydrobasins framework
+        dplyr::filter(DAM_TYPE %in% c('Dam', 'Lake Control Dam', 'Low Permeable Dam')) %>% #remove locks, which don't trap sediment in the way we care about here
+        dplyr::mutate(RESV_CATCH_SKM = CATCH_SKM)%>%
+        dplyr::select(c('HYRIV_ID', 'RESV_CATCH_SKM'))
+    
+    return(barriers)
 }

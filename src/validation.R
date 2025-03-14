@@ -13,7 +13,6 @@ prepFEMA <- function(){
     states <- list.files('data/path_to_data/CONUS_connectivity_data/CONUS_FEMA')
 
     fema_shp <- data.frame()
- #   fema_elev_shp <- data.frame()
     for(i in states){
         geodatabase <- list.files(paste0('data/path_to_data/CONUS_connectivity_data/CONUS_FEMA/', i), pattern = "\\.gdb$")
         
@@ -25,20 +24,10 @@ prepFEMA <- function(){
             dplyr::mutate(STATE = i) %>%
             dplyr::select(c('FLD_AR_ID', 'STATE', 'FLD_ZONE'))
         
-        #grab 100yr flood wse
-        # fema_elev <- sf::st_read(paste0('data/path_to_data/CONUS_connectivity_data/CONUS_FEMA/', i, '/', geodatabase),
-        #                             layer = 'S_BFE',
-        #                             quiet = TRUE) %>%
-        #     dplyr::mutate(elev_m = ELEV * 0.3048) %>% #ft to m
-        #     dplyr::select(c('BFE_LN_ID', 'elev_m'))
-        
         fema_shp <- rbind(fema_shp, fema_temp)
-     #   fema_elev_shp <- rbind(fema_elev_shp, fema_elev)
     }
 
     return(fema_shp)
-    # return(list('fema_shp'=fema_shp,
-    #             'fema_elev_shp'=fema_elev_shp))
 }
 
 
@@ -49,8 +38,6 @@ prepFEMA <- function(){
 valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis, basinData){
     sf::sf_use_s2(FALSE)
     
-   # preppedFEMA_depths <- preppedFEMA$fema_elev_shp
-   # preppedFEMA <- preppedFEMA$fema_shp
     dem <- terra::unwrap(basinData$terra$dem) #[cm] need to unwrap the packed terra package (for distributed computing)
 
     #prep
@@ -110,22 +97,10 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis, basinData){
         dplyr::summarise(A_femaAEP_km2 = 1e-6 * sum(as.numeric(A_femaAEP_m2), na.rm=T)) %>%
         dplyr::select(c('NHDPlusID', 'A_femaAEP_km2'))
 
-    # #get average fema ground elevation by nhd catchment
-    # fema_terra <- terra::vect(preppedFEMA_depths)
-    # ground_evals <- terra::extract(dem, fema_terra, fun=min) #thalweg elevation
-    # preppedFEMA_depths$groundElevLookup_m <- ground_evals$elev_cm * 0.01 #[cm to m]
-
-    # preppedFEMA_depths <- unit_catchments %>%
-    #     sf::st_join(preppedFEMA_depths, join=sf::st_intersects) %>%
-    #     sf::st_drop_geometry() %>%
-    #     dplyr::left_join(basinAnalysis, by='NHDPlusID') %>%
-    #     dplyr::select(c('NHDPlusID', 'elev_m', 'groundElevLookup_m', 'Htf_qFEMA_m'))
-
     #build validation table
     out <- data.frame('huc4'=huc4id,
                     'NHDPlusID'=basinAnalysis$NHDPlusID,
                     'A_qFEMA_km2'=basinAnalysis$A_qFEMA_m2*1e-6,
-#                    'V_qFEMA_km3'=basinAnalysis$V_qFEMA_m3*1e-9,
                     'channel_area_km2'=basinAnalysis$channel_area_km2,
                     'LengthKM'=basinAnalysis$LengthKM)
 
@@ -136,8 +111,6 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis, basinData){
         tidyr::drop_na(A_femaAEP_km2) #a few edge cases where  fema shp is 0 km2, but just brushes against model catchment and intersects --> NA fema area. SO remove them.
 
     return(out)  
-    # return(list('for_area'=out,
-    #             'for_depth'=preppedFEMA_depths))
 }
 
 
@@ -173,7 +146,7 @@ valModelUSGS <- function(huc4id, basinAnalysis, usgs_maps){
     #filter for modeled results given an exceedance probability
     basinAnalysis <- basinAnalysis %>%
         tidyr::gather(key=key_exdprob, value=A_model_m2, c('A_q0_2_m2', 'A_q0_5_m2', 'A_q1_m2', 'A_q2_m2', 'A_q4_m2', 'A_q10_m2', 'A_q20_m2','A_q50_m2', 'A_q80_m2', 'A_q90_m2', 'A_q96_m2', 'A_q98_m2', 'A_q99_m2', 'A_q99_5_m2', 'A_q99_8_m2')) %>%
-        dplyr::mutate(key_exdprob = substr(key_exdprob, 1,nchar(key_exdprob)-3)) %>%
+        dplyr::mutate(key_exdprob = substr(key_exdprob, 1,nchar(key_exdprob)-3)) %>% #6
         dplyr::select(c('NHDPlusID', 'GageID', 'key_exdprob', 'Wb_m', 'LengthKM', 'A_model_m2'))
 
     #keep gage IDs for later
@@ -188,7 +161,7 @@ valModelUSGS <- function(huc4id, basinAnalysis, usgs_maps){
     
     basinAnalysis <- basinAnalysis %>% 
         sf::st_drop_geometry() %>%
-        dplyr::group_by(NHDPlusID, key_exdprob) %>% #aggregate multiple polygons that overlap reach
+        dplyr::group_by(NHDPlusID, key_exdprob) %>% #aggregate multiple polygons that overlap reach 1/2/25: I THIINK THIS IS ACTUALLY AN ARTIFACT OF WHAT I FOUND IN VOLS: SOME REACHES ARE IN THE MODEL OUTPUT MULTIPLE TIMES WITH DIFFERENT WATERBODIES
         dplyr::summarise(A_model_m2 = sum(A_model_m2, na.rm=T),
                         channel_area_km2=mean(((Wb_m/1000)*LengthKM)), #mean to pass through groupby
                         LengthKM = mean(LengthKM)) #mean to pass through groupby
@@ -259,6 +232,7 @@ valModelUSGSvols <- function(huc4id, basinAnalysis_orig, val_USGS, modeled_flow_
         }
 
         grid_d <- terra::rast(i)
+        res <- terra::res(grid_d)[1]
         grid_d <- terra::project(grid_d, "epsg:4269")
         grid_d <- grid_d * 0.3048 #ft to m
         grid_a <- terra::cellSize(grid_d, unit="m", transform=TRUE)
@@ -266,48 +240,41 @@ valModelUSGSvols <- function(huc4id, basinAnalysis_orig, val_USGS, modeled_flow_
         grid_v <- grid_d * grid_a #m3
         vols <- terra::extract(grid_v, unit_catchments_terra, fun=function(x){sum(x, na.rm=T)})
         vols <- vols[,2]
-
-        # depths <- terra::extract(grid, unit_catchments_terra, fun=function(x){sum(x, na.rm=T)})
-        # depths <- depths[,2] * 0.3048 #ft to m
-
-        # areas <- terra::extract(grid_a, unit_catchments_terra, fun=function(x){sum(x, na.rm=T)})
-        # areas <- areas[,2] #already in m2
         
         df <- data.frame('NHDPlusID'=unit_catchments$NHDPlusID,
                         'key_exdprob'=paste0('V_',exdprob),
                         'V_usgs_m3'=vols)
         
-                # df <- data.frame('NHDPlusID'=unit_catchments$NHDPlusID,
-                #         'key_exdprob'=paste0('A_',exdprob),
-                #         'D_usgs_m'=depths)
-
+        #only keep the catchments with actual modeled flow (i.e. vol > 0)
+        df <- df %>%
+            dplyr::filter(V_usgs_m3 > 0)
+        
         #get modeled results
         basinAnalysis <- basinAnalysis_orig %>%
             sf::st_drop_geometry() %>%
-            dplyr::filter(NHDPlusID %in% val_USGS$NHDPlusID) %>%
+            dplyr::filter(NHDPlusID %in% unique(df$NHDPlusID)) %>%
             tidyr::gather(key=key_exdprob, value=V_model_m3, c('V_q0_2_m3', 'V_q0_5_m3', 'V_q1_m3', 'V_q2_m3', 'V_q4_m3', 'V_q10_m3', 'V_q20_m3','V_q50_m3', 'V_q80_m3', 'V_q90_m3', 'V_q96_m3', 'V_q98_m3', 'V_q99_m3', 'V_q99_5_m3', 'V_q99_8_m3')) %>%
-            dplyr::mutate(key_exdprob = substr(key_exdprob, 1,nchar(key_exdprob)-3)) %>%
+            tidyr::gather(key=temp, value=H_model_m, c('Htf_q0_2_m', 'Htf_q0_5_m', 'Htf_q1_m', 'Htf_q2_m', 'Htf_q4_m', 'Htf_q10_m', 'Htf_q20_m', 'Htf_q50_m', 'Htf_q80_m', 'Htf_q90_m', 'Htf_q96_m', 'Htf_q98_m', 'Htf_q99_m', 'Htf_q99_5_m', 'Htf_q99_8_m')) %>%
+            dplyr::mutate(key_exdprob = substr(key_exdprob, 1,nchar(key_exdprob)-3)) %>% #6
+            dplyr::mutate(temp = paste0('V_', substr(temp, 5,nchar(temp)-2))) %>%
+            dplyr::filter(temp == key_exdprob) %>%
             dplyr::mutate(V_model_km3 = V_model_m3 * 1e-9) %>%
-            dplyr::select(c('NHDPlusID', 'GageID', 'key_exdprob', 'Wb_m', 'LengthKM', 'V_model_km3'))
+            dplyr::select(c('NHDPlusID', 'GageID', 'key_exdprob', 'Wb_m', 'LengthKM', 'V_model_km3', 'H_model_m'))
 
         usgs_lookup <- df %>%
-            dplyr::mutate(V_usgs_km3 = V_usgs_m3 * 1e-9, #A_usgs_m2 * D_usgs_m * 1e-9,
+            dplyr::mutate(V_usgs_km3 = V_usgs_m3 * 1e-9,
                         key_exdprob = paste0('V', substr(key_exdprob, 2, nchar(key_exdprob)))) %>%
             dplyr::select(c('NHDPlusID', 'key_exdprob', 'V_usgs_km3'))
-
-        # model_lookup <- val_USGS %>%
-        #     dplyr::left_join(df, by=c('NHDPlusID', 'key_exdprob')) %>%
-        #     dplyr::mutate(V_usgs_km3 = A_usgs_km2 * (D_usgs_m*1e-3),
-        #                 key_exdprob = paste0('V', substr(key_exdprob, 2, nchar(key_exdprob)))) %>%
-        #     dplyr::select(c('huc4', 'NHDPlusID', 'key_exdprob', 'V_usgs_km3'))
 
         out_loop <- usgs_lookup %>%
             dplyr::left_join(basinAnalysis, by=c('NHDPlusID', 'key_exdprob')) %>%
             dplyr::filter(key_exdprob %in% paste0('V_', substr(df$key_exdprob, 3, nchar(df$key_exdprob)))) %>%
-            dplyr::mutate(huc4 = huc4id) %>%
-            dplyr::select(c('huc4', 'NHDPlusID', 'key_exdprob', 'GageID', 'V_model_km3', 'V_usgs_km3'))
+            dplyr::mutate(huc4 = huc4id,
+                        usgs_res_m = res) %>%
+            dplyr::select(c('huc4', 'NHDPlusID', 'usgs_res_m', 'key_exdprob', 'GageID', 'H_model_m', 'V_model_km3', 'V_usgs_km3'))
         
         out <- rbind(out, out_loop)
+
     }
     
     return(out)
