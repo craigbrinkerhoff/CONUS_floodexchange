@@ -3,24 +3,23 @@
 ## Summer 2024
 
 
-getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd, benchmark_index){
+getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd){
   huc2 <- substr(huc4id, 1, 2)
   huc8s <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU8.shp')) %>%
     dplyr::filter(substr(huc8, 1, 4)==huc4id)
-  
-  
+
   huc8ids <- huc8s$huc8
 
   gages_fin <- data.frame()
   for(i in huc8ids){
     gages <- tryCatch({dataRetrieval::whatNWISdata(huc = i,
-                                         parameterCd = c('00065', '00060'), #discharge parameter code [cfs]
-                                         startDt = gageRecordStart, #only checks the gagues were active between these dates, need to pull the gage record to calucalte actual periods of redcord, etc. (see below)
-                                         endDt = gageRecordEnd)},
+                                        parameterCd = c('00065', '00060'), #discharge parameter code [cfs]
+                                        startDt = gageRecordStart, #only checks the gagues were active between these dates, need to pull the gage record to calucalte actual periods of redcord, etc. (see below)
+                                        endDt = gageRecordEnd)},
                       error=function(x){data.frame('site_no'=i,
-                                                   'parm_cd'=NA,
-                                                   'data_type_cd'=NA)}) #trycatch for huc8s without any gages can't return anything
-    
+                                                  'parm_cd'=NA,
+                                                  'data_type_cd'=NA)}) #trycatch for huc8s without any gages can't return anything
+
     #remove 'water quality' discharge measurements tagged under qw
     gages <- gages %>%
       dplyr::select(c('site_no', 'parm_cd', 'data_type_cd')) %>%
@@ -29,7 +28,7 @@ getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd, benchmark_inde
 
     gages_fin <- rbind(gages_fin, gages)
   }
-  
+
   return(gages_fin$site_no)
 }
 
@@ -39,48 +38,76 @@ getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd, benchmark_inde
 
 modelsBHG <- function(){
   dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
-    dplyr::select(c('Physiographic Division', '...9', '...11','...13')) #some necessary manual munging for colnames from dataset
-  
-  colnames(dataset) <- c('DIVISION', 'DA_km2', 'Qb_cms','Wb_m')
-  
+    dplyr::select(c('Physiographic Division', '...9', '...11','...13','...17')) #some necessary manual munging for colnames from dataset
+
+  colnames(dataset) <- c('DIVISION', 'DA_km2', 'Qb_cms','Wb_m','Ab_m2')
+
   dataset$Wb_m <- as.numeric(dataset$Wb_m)
+  dataset$Ab_m2 <- as.numeric(dataset$Ab_m2)
   dataset$Qb_cms <- as.numeric(dataset$Qb_cms)
   dataset$DA_km2 <- as.numeric(dataset$DA_km2)
-  
+
   dataset <- tidyr::drop_na(dataset)
-  
+
   division <- toupper(sort(unique(dataset$DIVISION))) #make lowercase and sort
-  
+
   #build models, grouped by physiographic region
-  models <- dplyr::group_by(dataset, DIVISION) %>%
-    dplyr::do(model_Wb = lm(log10(Wb_m)~log10(DA_km2), data=.),
-              model_Qb = lm(log10(Qb_cms)~log10(DA_km2), data=.)) %>% #fit models by physiographic regions
-    dplyr::summarise(a_Wb = 10^(model_Wb$coef[1]), #model intercept
-                     b_Wb = model_Wb$coef[2], #model exponent
-                     r2_Wb = summary(model_Wb)$r.squared, #model performance
-                     mean_residual_Wb = mean(model_Wb$residuals, na.rm=T),
-                     sd_residual_Wb = sd(model_Wb$residuals, na.rm=T),
-                     see_Wb = sd(model_Wb$residuals, na.rm=T),
-                     a_Qb = 10^(model_Qb$coef[1]),
-                     b_Qb = model_Qb$coef[2],
-                     r2_Qb = summary(model_Qb)$r.squared) %>%
+  models <- dataset %>%
+    dplyr::mutate(Wb_log10 = log10(Wb_m),
+                  Qb_log10 = log10(Qb_cms),
+                  DA_log10 = log10(DA_km2),
+                  Ab_log10 = log10(Ab_m2)) %>%
+    dplyr::group_by(DIVISION) %>%
+    dplyr::do(model_Wb = lm(Wb_log10~DA_log10, data=.),
+              model_Qb = lm(Qb_log10~DA_log10, data=.), #fit models by physiographic regions
+                model_Ab = lm(Ab_log10~DA_log10, data=.)) %>% 
+    dplyr::summarise(a_Wb = model_Wb$coef[1], #model intercept
+                    b_Wb = model_Wb$coef[2], #model exponent
+                    r2_Wb = summary(model_Wb)$r.squared, #model performance
+                    mean_residual_Wb = mean(10^(model_Wb$residuals), na.rm=T),
+                    see_Wb = summary(model_Wb)$sigma,
+                    a_Qb = model_Qb$coef[1],
+                    b_Qb = model_Qb$coef[2],
+                    r2_Qb = summary(model_Qb)$r.squared,
+                    mean_residual_Qb = mean(10^(model_Qb$residuals), na.rm=T),
+                    see_Qb = summary(model_Qb)$sigma,
+                    a_Ab = model_Ab$coef[1],
+                    b_Ab = model_Ab$coef[2],
+                    r2_Ab = summary(model_Ab)$r.squared,
+                    mean_residual_Ab = mean(10^(model_Ab$residuals), na.rm=T),
+                    see_Ab = summary(model_Ab)$sigma) %>%
     dplyr::mutate(division = division)
-  
-  
+
+
   models[models$division == "INTERMONTANE PLATEAU",]$division <- "INTERMONTANE PLATEAUS" #make sure names line up
-  
+
   return(models)
 }
 
 
 
 
+makeValGageRecord <- function(gageRecord, BHGmodel_jacknife){
+
+  ids <- c(do.call(rbind, (lapply(gageRecord, function(x) nrow(x) > 0))))
+  ids <- which(ids == TRUE)
+  gageRecord <- gageRecord[ids]
+
+  ids2 <- c(do.call(rbind, (lapply(gageRecord, function(x) x[1,]$site_no %in% BHGmodel_jacknife$GageID))))
+  gageRecord <- gageRecord[ids2]
+
+  return(gageRecord)
+}
+
+
+
 dataBHG <- function(){
   dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
-    dplyr::select(c('USGS Station No.', 'Physiographic Division', '...9', '...13')) #some necessary manual munging for colnames from dataset
+    dplyr::select(c('USGS Station No.', 'Physiographic Division', '...9', '...11','...13')) #some necessary manual munging for colnames from dataset
   
-  colnames(dataset) <- c('GageID', 'DIVISION', 'DA_gage_skm','Wb_m_obs')
+  colnames(dataset) <- c('GageID', 'DIVISION', 'DA_gage_skm','Qb_cms','Wb_m_obs')
   
+  dataset$Qb_cms <- as.numeric(dataset$Qb_cms)
   dataset$Wb_m_obs <- as.numeric(dataset$Wb_m_obs)
   dataset$DA_gage_skm <- as.numeric(dataset$DA_gage_skm)
   
@@ -91,6 +118,13 @@ dataBHG <- function(){
 
 
 
+
+unshapefify <- function(shp){
+  shp <- shp %>% 
+    sf::st_drop_geometry()
+  
+  return(shp)
+}
 
 
 
@@ -107,21 +141,6 @@ fixGeometries <- function(rivnet){
 
 
 
-# setupMonteCarlo <- function(m,bankfullModel, variable){
-#   set.seed(654)
-  
-#   if(variable == 'justone'){
-#     out <- rnorm(1000,bankfullModel$bankfull_stage_mu_m, bankfullModel$bankfull_stage_se_m)
-#     out <- mean(out) #no MC, just take the median of the simulated distribution 
-#   }
-#   else{ #normal MC
-#     out <- rnorm(m,bankfullModel$bankfull_stage_mu_m, bankfullModel$bankfull_stage_se_m)
-#   }
-  
-#   return(list('stage_m'=out,
-#               'depth_m'=bankfullModel$bankfull_depth_mu_m))
-# }
-
 
 
 #' Note: Sf catchments are handled internally (using sql queries) because for some reason dplyr::filter won't work on these objects passed betweenn functions... ANd the sql is likely faster anyway
@@ -137,26 +156,6 @@ buildBasinDataPackage <- function(huc4) {
   outlist <- lapply(prelist, terra::wrap) #terra holds C++ pointers in memory so making lists of objects (for distributed computing won't work- we need to 'wrap' the objects into a packed state that can be sent over a serialized connection)
   
   
-  #build waterbody type lookup table
-  # sf::sf_use_s2(FALSE)
-  # waterbodies <-  sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
-  #                             layer = 'NHDWaterbody',
-  #                             quiet = TRUE) %>%
-  #   sf::st_zm()
-  # waterbodies <- fixGeometries(waterbodies)
-  # flowlines <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
-  #                             layer = 'NHDFlowline',
-  #                             quiet = TRUE) %>%
-  #   sf::st_zm()
-  # flowlines <- fixGeometries(flowlines)
-  # waterbodies_fin <- sf::st_join(waterbodies, flowlines, join=sf::st_contains, largest=TRUE)
-  
-  # waterbodyLookUp <- data.frame('NHDPlusID_reach'=waterbodies_fin$NHDPlusID.y,
-  #                               'NHDPlusID_polygon'=waterbodies_fin$NHDPlusID.x,
-  #                               'waterbody_type'=as.character(waterbodies_fin$FType.x))
-  
-  # return(list('terra'=outlist,
-  #             'waterbodyLookUp'=waterbodyLookUp))
   return('terra'=outlist)
 }
 
@@ -166,6 +165,8 @@ unlistGages <- function(gage_list){
   df <- dplyr::bind_rows(gage_list)
   return(df)
 }
+
+
 
 
 
@@ -194,4 +195,39 @@ prepGWD <- function(){
         dplyr::select(c('HYRIV_ID', 'RESV_CATCH_SKM'))
     
     return(barriers)
+}
+
+
+
+#Our bandaid version of readNWISrating that manually constructs our own exsa url
+readNWISrating_CRAIG <- function(siteNumber, type='base', convertType = TRUE) {
+
+  # No rating xml service
+  #BROKEN AS OF 3/21/25. NWIS seems to have changed internal urls for rating tables, so dataRetrieval::readNWISrating() breaks because dataRetrieval::constructNWISURL() breaks. A band-aid is to directly constructing our own url using a custom version of readNWISrating() (in ~/src/utils.R), circumventing readNWISdata.
+  #url <- constructNWISURL(siteNumber, service = "rating", ratingType = type)
+  url <- paste0('https://waterdata.usgs.gov/nwisweb/data/ratings/', type, '/USGS.', siteNumber, '.', type, '.rdb')
+
+  data <- dataRetrieval::importRDB1(url, asDateTime = FALSE, convertType = convertType)
+
+  if ("current_rating_nu" %in% names(data)) {
+    intColumns <- intColumns[!("current_rating_nu" %in% names(data)[intColumns])]
+    data$current_rating_nu <- gsub(" ", "", data$current_rating_nu)
+  }
+
+  if (nrow(data) > 0) {
+    if (type == "base") {
+      Rat <- grep("//RATING ", comment(data), value = TRUE, fixed = TRUE)
+      Rat <- sub("# //RATING ", "", Rat)
+      Rat <- scan(text = Rat, sep = " ", what = "")
+      attr(data, "RATING") <- Rat
+    }
+
+    siteInfo <- suppressMessages(dataRetrieval::readNWISsite(siteNumbers = siteNumber))
+
+    attr(data, "siteInfo") <- siteInfo
+    attr(data, "variableInfo") <- NULL
+    attr(data, "statisticInfo") <- NULL
+  }
+
+  return(data)
 }

@@ -1,3 +1,5 @@
+Warning message:
+package ‘targets’ was built under R version 4.4.2 
 
 Attaching package: ‘dplyr’
 
@@ -5,3 +7,41 @@ The following objects are masked from ‘package:base’:
 
     intersect, setdiff, setequal, union
 
+Error:
+! targets::tar_make() error
+
+── Debugging ───────────────────────────────────────────────────────────────────
+    • tar_errored()
+    • tar_meta(fields = any_of("error"), complete_only = TRUE)
+    • tar_workspace()
+    • tar_workspaces()
+
+── How to ──────────────────────────────────────────────────────────────────────
+    • Debug: https://books.ropensci.org/targets/debugging.html
+    • Help: https://books.ropensci.org/targets/help.html
+
+── Last error message ──────────────────────────────────────────────────────────
+    Can't combine `..12$event_length_dys` <double> and `..43$event_length_dys` <list>.
+
+── Last error traceback ────────────────────────────────────────────────────────
+    plotValidationTau(gageTau_val)
+    gageTau_val %>% dplyr::bind_rows() %>% dplyr::group_by(site_no,      fla...
+    tidyr::pivot_wider(., id_cols = site_no, names_from = flag, values_from ...
+    dplyr::filter(., event_flood_m3 > 0)
+    dplyr::summarise(., event_length_dys = mean(event_length_dys,      na.rm...
+    dplyr::group_by(., site_no, flag)
+    dplyr::bind_rows(.)
+    vec_rbind(!!!dots, .names_to = .id, .error_call = current_env())
+    (function ()  vec_default_ptype2(x = x, y = y, x_arg = x_arg, y_arg = y_...
+    vec_default_ptype2(x = x, y = y, x_arg = x_arg, y_arg = y_arg,      call...
+    withRestarts(stop_incompatible_type(x, y, x_arg = x_arg, y_arg = y_arg, ...
+    withOneRestart(expr, restarts[[1L]])
+    doWithOneRestart(return(expr), restart)
+    stop_incompatible_type(x, y, x_arg = x_arg, y_arg = y_arg, `vctrs:::from...
+    stop_incompatible(x, y, x_arg = x_arg, y_arg = y_arg, details = details,...
+    stop_vctrs(message, class = c(class, "vctrs_error_incompatible"),      x...
+    abort(message, class = c(class, "vctrs_error"), ..., call = call)
+    signal_abort(cnd, .file)
+    signalCondition(cnd)
+    (function (condition)  {     state$error <- build_message(condition)    ...
+Execution halted

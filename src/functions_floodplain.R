@@ -37,17 +37,17 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
   
   #grab sub-daily discharge data
   gagedata <- tryCatch(dataRetrieval::readNWISdata(sites = gageID,
-                                          service='uv', #15' or 30' stage and flow (depending on gage)
-                                          parameterCd = c('00060'), #discharge parameter code [cfs]
+                                          service='dv',
+                                          parameterCd = '00060', #discharge parameter code [cfs]
                                           startDate = gageRecordStart,
                                           endDate = gageRecordEnd),
                       error = function(m){return(data.frame())})
 
   if(nrow(gagedata)==0) {return(data.frame())} #if no gage data, move on
-  if(!("X_00060_00000" %in% colnames(gagedata))){return(data.frame())} #if incorrect discharge column name (happens sometimes), move on
+  if(!("X_00060_00003" %in% colnames(gagedata))){return(data.frame())} #if incorrect discharge column name (happens sometimes), move on
 
   #convert to metric
-  gagedata$Q_cms <- gagedata$X_00060_00000 * 0.0283 #cfs to cms
+  gagedata$Q_cms <- gagedata$X_00060_00003 * 0.0283 #cfs to cms
   
   #only keep flowing events
   gagedata <- gagedata %>%
@@ -56,17 +56,17 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
   # convert to date (workaround to handle known date class bug with midnight- https://github.com/tidyverse/lubridate/issues/1124)
   gagedata$date <- lubridate::ymd_hms(format(as.POSIXct(gagedata$dateTime), format = "%Y-%m-%d %T %Z"))
 
-  gagedata_og <- gagedata
+  # gagedata_og <- gagedata
 
   #downsample to hourly (just to be consistent and reduce volume of data)
-  gagedata <- gagedata_og %>%
-    dplyr::mutate(date_hr = lubridate::ymd_h(paste0(lubridate::year(date), '-', lubridate::month(date),'-',lubridate::day(date), '-', lubridate::hour(date)))) %>%
-    dplyr::group_by(date_hr) %>%
-    dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
-                    Q_cms = mean(Q_cms, na.rm=T))
+  # gagedata <- gagedata_og %>%
+  #   dplyr::mutate(date_hr = lubridate::ymd_h(paste0(lubridate::year(date), '-', lubridate::month(date),'-',lubridate::day(date), '-', lubridate::hour(date)))) %>%
+  #   dplyr::group_by(date_hr) %>%
+  #   dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
+  #                   Q_cms = mean(Q_cms, na.rm=T))
 
   #get max annual floods for calculating the FEMA 100yr AEP
-  gagedata_aep <- gagedata_og %>%
+  gagedata_aep <- gagedata %>%
     dplyr::mutate(year = lubridate::year(date)) %>%
     dplyr::group_by(year) %>%
     dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
@@ -91,7 +91,8 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
   gagedata$exceed_prob <- (gagedata$rank/(nrow(gagedata) + 1)) #exceed prob for a given hour over 'spread' years
 
   #grab rating table to convert to stage
-  ratingTable <- tryCatch(dataRetrieval::readNWISrating(gageID, "exsa"),
+  #source('src/utils.R')
+  ratingTable <- tryCatch(dataRetrieval::readNWISrating(gageID, type='exsa'), #readNWISrating_CRAIG
                       error = function(m){return(data.frame())})
   ratingTable$stage_m <- (ratingTable$INDEP  + ratingTable$SHIFT) * 0.3048 #ft to m
   ratingTable$Q_cms <- ratingTable$DEP * 0.0283
@@ -99,7 +100,7 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
   #convert historical streamflow record to stages using rating table
   gagedata$stage_m <- sapply(gagedata$Q_cms, function(i){ratingTable[which.min(abs(ratingTable$Q_cms - i)),]$stage_m})
 
-  if(is.list(gagedata$stage_m)){return(data.frame())} #sometimes you get an empty list, presumbaly b/c the rating table is empty
+  if(is.list(gagedata$stage_m)){return(data.frame())} #sometimes you get an empty list b/c the rating table is empty
 
   #add flag if gagedata is outside of the rating table
   gagedata$ratingflag <- ifelse(gagedata$Q_cms > max(ratingTable$Q_cms) | gagedata$Q_cms < min(ratingTable$Q_cms), 1, 0)
@@ -228,8 +229,8 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
 
 
 modelInundation <- function(inundationData, floodDepth){
+  library(terra)
   hand <- inundationData$hand
-  #bankfullMask <- inundationData$bankfullMask
   
   #actual inundation calculation
   floodDepths <- floodDepth - hand
@@ -345,15 +346,17 @@ buildDepthAHG <- function(gage, minADCPMeas){
                                                       'lm_depth_b'=NA))}
   
   #get bankfull depth
-  lm_depth <- lm(log(depth_m)~log(Q_cms), data=surfaceData)
+  lm_depth <- lm(log10(depth_m)~log10(Q_cms), data=surfaceData)
   lm_depth_a <- coef(lm_depth)[1]
   lm_depth_b <- coef(lm_depth)[2]
+  lm_depth_bias <- mean(10^(lm_depth$residuals), na.rm=T)
   
   #setup site info for later export
   site_info <- data.frame('site_no'=gageID,
                           'lm_r2'=summary(lm_depth)$r.squared,
                           'lm_depth_a'=lm_depth_a,
-                          'lm_depth_b'=lm_depth_b)
+                          'lm_depth_b'=lm_depth_b,
+                          'lm_depth_bias_correct'=lm_depth_bias)
 
   rownames(site_info) <- NULL
   
@@ -365,24 +368,33 @@ buildDepthAHG <- function(gage, minADCPMeas){
 
 
 
-buildUpscalingModel <- function(huc4, gageRecord, gage, BHGmodel, depAHG, minAHGr2, gageRecordStart, gageRecordEnd){
-  huc2 <- substr(huc4, 1, 2)
+buildUpscalingModel <- function(huc2, gageRecord, gage, BHGmodel, depAHG, minAHGr2, gageRecordStart, gageRecordEnd){
 
   #setup
   depAHG <- dplyr::bind_rows(depAHG)
 
   gageRecord <- dplyr::bind_rows(gageRecord) %>%
-    dplyr::select(c('site_no', 'date_hr', 'fema100yrflood_cms', 'Q_cms', 'exceed_prob'))
+    dplyr::select(c('site_no', 'fema100yrflood_cms', 'Q_cms', 'exceed_prob')) #date_hr
 
   #filter for flows above bankfull, to calculate exceedance probabilities for flood events (aside from the max-annual AEP used to validate against FEMA)
   gage <- sf::st_drop_geometry(gage) %>% 
     dplyr::bind_rows() %>% 
     dplyr::select(c('site_no', 'DA_skm', 'physio_region')) %>% 
-    sf::st_drop_geometry()
+    sf::st_drop_geometry() %>%
+    dplyr::filter(!(is.na(physio_region)))
   
-  gage$a_Qb <- sapply(gage$physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$a_Qb)})
-  gage$b_Qb <- sapply(gage$physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$b_Qb)})
-  gage$Qb_m <- gage$a_Qb * (gage$DA_skm)^gage$b_Qb
+  gage$a_Qb <- as.numeric(sapply(gage$physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$a_Qb)}))
+  gage$b_Qb <- as.numeric(sapply(gage$physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$b_Qb)}))
+  gage$Qb_cms_log10 <- gage$a_Qb + gage$b_Qb*log10(gage$DA_skm)
+
+  #adjust for back-transformed bias using the mean residual
+  BHGmodel <- BHGmodel %>%
+    dplyr::select('division', 'mean_residual_Qb')
+  
+  gage <- gage %>%
+    dplyr::left_join(BHGmodel, by=c('physio_region'='division')) %>%
+    dplyr::mutate(Qb_cms = 10^(Qb_cms_log10) * mean_residual_Qb) #using the mean log residual, in transformed to ntural space, a la eq 9.24 from https://pubs.usgs.gov/tm/04/a03/tm4a3.pdf (also see https://nrtwq.usgs.gov/co/methods/)
+    #note the residuals are normally distrubted to this doesn't really effect much
   
   #bring everything together
   upscaling_df <- gageRecord %>%
@@ -393,13 +405,13 @@ buildUpscalingModel <- function(huc4, gageRecord, gage, BHGmodel, depAHG, minAHG
 
   #filter for flows above bankfull and calculate exceed prob from that
   num <- upscaling_df %>%
-    dplyr::filter(Q_cms > Qb_m) %>%
+    dplyr::filter(Q_cms > Qb_cms) %>%
     dplyr::group_by(site_no) %>%
     dplyr::summarise(n=n())
   
   exceed_prob_df <- upscaling_df %>%
     dplyr::left_join(num, by='site_no') %>%
-    dplyr::filter(Q_cms > Qb_m) %>%
+    dplyr::filter(Q_cms > Qb_cms) %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(rank = rank(-Q_cms)) %>%
     dplyr::mutate(exceed_prob_bankfull = rank / (n+1)) %>%
@@ -413,8 +425,19 @@ buildUpscalingModel <- function(huc4, gageRecord, gage, BHGmodel, depAHG, minAHG
   duration_dys <- lubridate::ymd(gageRecordEnd) - lubridate::ymd(gageRecordStart)
 
   #calculate water level, relative to channel bottom
-  upscaling_df$Htf_m <- exp(upscaling_df$lm_depth_a)*upscaling_df$Q_cms^upscaling_df$lm_depth_b
-  upscaling_df$femaHtf_m <- exp(upscaling_df$lm_depth_a)*upscaling_df$fema100yrflood_cms^upscaling_df$lm_depth_b
+  upscaling_df$Htf_m_notcorrected <- 10^(upscaling_df$lm_depth_a + (upscaling_df$lm_depth_b * log10(upscaling_df$Q_cms)))
+  upscaling_df$Htf_m <- upscaling_df$Htf_m_notcorrected * upscaling_df$lm_depth_bias_correct
+
+  upscaling_df$femaHtf_m_notcorrected <- 10^(upscaling_df$lm_depth_a + (upscaling_df$lm_depth_b * log10(upscaling_df$fema100yrflood_cms)))
+  upscaling_df$femaHtf_m <- upscaling_df$femaHtf_m_notcorrected * upscaling_df$lm_depth_bias_correct
+
+  #Bankful depth
+  qBankful_forModel <- upscaling_df %>%
+    dplyr::group_by(site_no) %>%
+    dplyr::mutate(diff = abs(Qb_cms - Q_cms)) %>%
+    dplyr::slice_min(diff, with_ties=FALSE) %>%
+    dplyr::mutate(Hb_m = Htf_m) %>%
+    dplyr::select(c('site_no','Hb_m'))
 
   #100yr FEMA AEP flood
   qFEMA_forModel <- upscaling_df %>%
@@ -427,120 +450,135 @@ buildUpscalingModel <- function(huc4, gageRecord, gage, BHGmodel, depAHG, minAHG
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.002)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q0_2flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q0_2flood_Htf_m'))
+    dplyr::mutate(q0_2flood_Htf_m = Htf_m,
+                q0_2flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q0_2flood_Htf_m', 'q0_2flood_Q_cms'))
 
   #Q0.5 flood
   q0_5_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.005)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q0_5flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q0_5flood_Htf_m'))
+    dplyr::mutate(q0_5flood_Htf_m = Htf_m,
+                q0_5flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q0_5flood_Htf_m', 'q0_5flood_Q_cms'))
 
   #Q1 flood
   q1_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.01)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q1flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q1flood_Htf_m'))
+    dplyr::mutate(q1flood_Htf_m = Htf_m,
+                q1flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q1flood_Htf_m', 'q1flood_Q_cms'))
 
   #Q2 flood
   q2_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.02)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q2flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q2flood_Htf_m'))
+    dplyr::mutate(q2flood_Htf_m = Htf_m,
+                q2flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q2flood_Htf_m', 'q2flood_Q_cms'))
   
   #Q4 flood
   q4_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.04)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q4flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q4flood_Htf_m'))
+    dplyr::mutate(q4flood_Htf_m = Htf_m,
+                q4flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q4flood_Htf_m', 'q4flood_Q_cms'))
 
   #Q10 flood
   q10_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.10)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q10flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q10flood_Htf_m'))
+    dplyr::mutate(q10flood_Htf_m = Htf_m,
+                q10flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q10flood_Htf_m', 'q10flood_Q_cms'))
   
   #Q20 flood
   q20_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.20)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q20flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q20flood_Htf_m'))
+    dplyr::mutate(q20flood_Htf_m = Htf_m,
+                q20flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q20flood_Htf_m', 'q20flood_Q_cms'))
   
   #Q50 flood
   q50_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.50)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q50flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q50flood_Htf_m'))
+    dplyr::mutate(q50flood_Htf_m = Htf_m,
+                q50flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q50flood_Htf_m', 'q50flood_Q_cms'))
   
   #Q80 flood
   q80_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.80)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q80flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q80flood_Htf_m'))
+    dplyr::mutate(q80flood_Htf_m = Htf_m,
+                q80flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q80flood_Htf_m', 'q80flood_Q_cms'))
 
   #Q90 flood
   q90_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.90)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q90flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q90flood_Htf_m'))
+    dplyr::mutate(q90flood_Htf_m = Htf_m,
+                q90flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q90flood_Htf_m', 'q90flood_Q_cms'))
   
   #Q96 flood
   q96_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.96)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q96flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q96flood_Htf_m'))
+    dplyr::mutate(q96flood_Htf_m = Htf_m,
+                q96flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q96flood_Htf_m', 'q96flood_Q_cms'))
 
   #Q98 flood
   q98_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.98)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q98flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q98flood_Htf_m'))
+    dplyr::mutate(q98flood_Htf_m = Htf_m,
+                q98flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q98flood_Htf_m', 'q98flood_Q_cms'))
   
   #Q99 flood
   q99_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.99)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q99flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q99flood_Htf_m'))
+    dplyr::mutate(q99flood_Htf_m = Htf_m,
+                q99flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q99flood_Htf_m', 'q99flood_Q_cms'))
   
   #Q99.5 flood
   q99_5_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.995)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q99_5flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q99_5flood_Htf_m'))
+    dplyr::mutate(q99_5flood_Htf_m = Htf_m,
+                q99_5flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q99_5flood_Htf_m', 'q99_5flood_Q_cms'))
   
   #Q99.8 flood
   q99_8_forModel <- upscaling_df %>%
     dplyr::group_by(site_no) %>%
     dplyr::mutate(diff = abs(exceed_prob_bankfull - 0.998)) %>% 
     dplyr::slice_min(diff, with_ties=FALSE) %>% #some exceed prob ties have stage that are ~0.01m apart, just take the first
-    dplyr::mutate(q99_8flood_Htf_m = Htf_m) %>%
-    dplyr::select(c('site_no','q99_8flood_Htf_m'))
+    dplyr::mutate(q99_8flood_Htf_m = Htf_m,
+                q99_8flood_Q_cms = Q_cms) %>%
+    dplyr::select(c('site_no','q99_8flood_Htf_m', 'q99_8flood_Q_cms'))
 
   forModel <- gage %>%
     dplyr::left_join(qFEMA_forModel, by='site_no') %>%
@@ -559,30 +597,57 @@ buildUpscalingModel <- function(huc4, gageRecord, gage, BHGmodel, depAHG, minAHG
     dplyr::left_join(q99_forModel, by='site_no') %>%
     dplyr::left_join(q99_5_forModel, by='site_no') %>%
     dplyr::left_join(q99_8_forModel, by='site_no') %>%
-    tidyr::pivot_longer(c('qFEMAflood_Htf_m', 'q0_2flood_Htf_m', 'q0_5flood_Htf_m', 'q1flood_Htf_m', 'q2flood_Htf_m', 'q4flood_Htf_m', 'q10flood_Htf_m', 'q20flood_Htf_m', 'q50flood_Htf_m', 'q80flood_Htf_m', 'q90flood_Htf_m', 'q96flood_Htf_m', 'q98flood_Htf_m', 'q99flood_Htf_m', 'q99_5flood_Htf_m', 'q99_8flood_Htf_m'))
+    dplyr::left_join(qBankful_forModel, by='site_no') %>%
+    tidyr::pivot_longer(c('Hb_m', 'qFEMAflood_Htf_m',
+                        'q0_2flood_Q_cms', 'q0_2flood_Htf_m',
+                        'q0_5flood_Q_cms', 'q0_5flood_Htf_m',
+                        'q1flood_Q_cms', 'q1flood_Htf_m',
+                        'q2flood_Q_cms', 'q2flood_Htf_m',
+                        'q4flood_Q_cms', 'q4flood_Htf_m',
+                        'q10flood_Q_cms', 'q10flood_Htf_m',
+                        'q20flood_Q_cms', 'q20flood_Htf_m',
+                        'q50flood_Q_cms', 'q50flood_Htf_m',
+                        'q80flood_Q_cms', 'q80flood_Htf_m',
+                        'q90flood_Q_cms', 'q90flood_Htf_m',
+                        'q96flood_Q_cms', 'q96flood_Htf_m',
+                        'q98flood_Q_cms', 'q98flood_Htf_m',
+                        'q99flood_Q_cms', 'q99flood_Htf_m',
+                        'q99_5flood_Q_cms', 'q99_5flood_Htf_m',
+                        'q99_8flood_Q_cms', 'q99_8flood_Htf_m'))
 
   #fit Htf models
   models_r2 <- forModel %>%
     dplyr::group_by(name) %>%
-    dplyr::mutate(broom::glance(lm(log(value) ~ log(DA_skm)))) %>%
+    dplyr::mutate(broom::glance(lm(log10(value) ~ log10(DA_skm)))) %>%
     dplyr::summarise(n_gages=sum(!(is.na(value))),
                     rsq = mean(adj.r.squared, na.rm=T)) %>% #mean to pass the constant through
     dplyr::select(c(name, n_gages, rsq))
 
+  models_biascorrect <- forModel %>%
+    dplyr::group_by(name) %>%
+    dplyr::group_modify(~ broom::augment(lm(log10(value) ~ log10(DA_skm), data = .x))) %>%
+    dplyr::ungroup() %>%
+    dplyr::group_by(name) %>%
+    dplyr::summarise(biascorrect = mean(10^(.resid)))
+
   models <- forModel %>%
     dplyr::group_by(name) %>%
-    dplyr::group_modify(~ broom::tidy(lm(log(value) ~ log(DA_skm), data = .x))) %>%
+    dplyr::group_modify(~ broom::tidy(lm(log10(value) ~ log10(DA_skm), data = .x))) %>%
     dplyr::select(name:std.error) %>%
     dplyr::left_join(models_r2, by='name') %>%
     tidyr::pivot_wider(names_from=term, values_from=c(estimate, std.error, n_gages, rsq)) %>%
-    dplyr::select(c('name', 'estimate_(Intercept)','estimate_log(DA_skm)', 'std.error_(Intercept)', 'std.error_log(DA_skm)', 'n_gages_(Intercept)', 'rsq_(Intercept)'))
+    dplyr::select(c('name', 'estimate_(Intercept)','estimate_log10(DA_skm)', 'std.error_(Intercept)', 'std.error_log10(DA_skm)', 'n_gages_(Intercept)', 'rsq_(Intercept)')) %>%
+    dplyr::left_join(models_biascorrect, by='name')
   
-  colnames(models) <- c('name', 'coef','exp', 'stderr_coef', 'stderr_exp', 'n_gages', 'rsq')
-  
+  colnames(models) <- c('name', 'coef','exp', 'stderr_coef', 'stderr_exp', 'n_gages', 'rsq', 'biascorrect')
+
   return(list('models'=models,
             'models_r2'=models_r2,
             'df'=forModel))
 }
+
+
+
 
 
 
@@ -616,29 +681,54 @@ buildNetworkModel <- function(huc4, upscalingModel, BHGmodel, basinData) {
 
   physio_region <- shp_temp$DIVISION
   
+  #add bankfull hydraulics
   network$a_Wb <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$a_Wb)})
   network$b_Wb <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$b_Wb)})
-  network$Wb_m <- network$a_Wb * (network$TotDASqKm)^network$b_Wb
+  network$mean_residual_Wb <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$mean_residual_Wb)})
+  network$Wb_m <- 10^(network$a_Wb + network$b_Wb*log10(network$TotDASqKm)) * network$mean_residual_Wb #see other notes on bias correction
+
+  network$a_Qb <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$a_Qb)})
+  network$b_Qb <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$b_Qb)})
+  network$mean_residual_Qb <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$mean_residual_Qb)})
+  network$Qb_cms <- 10^(network$a_Qb + network$b_Qb*log10(network$TotDASqKm)) * network$mean_residual_Qb #see other notes on bias correction
 
   upscalingModel <- upscalingModel$models
 
   #upscale mean flood depths by drainage area
-  network$Htf_qFEMA_m <- exp(upscalingModel[upscalingModel$name == 'qFEMAflood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'qFEMAflood_Htf_m',]$exp
-  network$Htf_q0_2_m <- exp(upscalingModel[upscalingModel$name == 'q0_2flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q0_2flood_Htf_m',]$exp
-  network$Htf_q0_5_m <- exp(upscalingModel[upscalingModel$name == 'q0_5flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q0_5flood_Htf_m',]$exp
-  network$Htf_q1_m <- exp(upscalingModel[upscalingModel$name == 'q1flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q1flood_Htf_m',]$exp
-  network$Htf_q2_m <- exp(upscalingModel[upscalingModel$name == 'q2flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q2flood_Htf_m',]$exp
-  network$Htf_q4_m <- exp(upscalingModel[upscalingModel$name == 'q4flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q4flood_Htf_m',]$exp
-  network$Htf_q10_m <- exp(upscalingModel[upscalingModel$name == 'q10flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q10flood_Htf_m',]$exp
-  network$Htf_q20_m <- exp(upscalingModel[upscalingModel$name == 'q20flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q20flood_Htf_m',]$exp
-  network$Htf_q50_m <- exp(upscalingModel[upscalingModel$name == 'q50flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q50flood_Htf_m',]$exp
-  network$Htf_q80_m <- exp(upscalingModel[upscalingModel$name == 'q80flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q80flood_Htf_m',]$exp
-  network$Htf_q90_m <- exp(upscalingModel[upscalingModel$name == 'q90flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q90flood_Htf_m',]$exp
-  network$Htf_q96_m <- exp(upscalingModel[upscalingModel$name == 'q96flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q96flood_Htf_m',]$exp
-  network$Htf_q98_m <- exp(upscalingModel[upscalingModel$name == 'q98flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q98flood_Htf_m',]$exp
-  network$Htf_q99_m <- exp(upscalingModel[upscalingModel$name == 'q99flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q99flood_Htf_m',]$exp
-  network$Htf_q99_5_m <- exp(upscalingModel[upscalingModel$name == 'q99_5flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q99_5flood_Htf_m',]$exp
-  network$Htf_q99_8_m <- exp(upscalingModel[upscalingModel$name == 'q99_8flood_Htf_m',]$coef) * network$TotDASqKm^upscalingModel[upscalingModel$name == 'q99_8flood_Htf_m',]$exp
+  network$Hb_m <- 10^(upscalingModel[upscalingModel$name == 'Hb_m',]$coef +  (upscalingModel[upscalingModel$name == 'Hb_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'Hb_m',]$biascorrect
+  network$Htf_qFEMA_m <- 10^(upscalingModel[upscalingModel$name == 'qFEMAflood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'qFEMAflood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'qFEMAflood_Htf_m',]$biascorrect
+  network$Htf_q0_2_m <- 10^(upscalingModel[upscalingModel$name == 'q0_2flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q0_2flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q0_2flood_Htf_m',]$biascorrect
+  network$Htf_q0_5_m <- 10^(upscalingModel[upscalingModel$name == 'q0_5flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q0_5flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q0_5flood_Htf_m',]$biascorrect
+  network$Htf_q1_m <- 10^(upscalingModel[upscalingModel$name == 'q1flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q1flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q1flood_Htf_m',]$biascorrect
+  network$Htf_q2_m <- 10^(upscalingModel[upscalingModel$name == 'q2flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q2flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q2flood_Htf_m',]$biascorrect
+  network$Htf_q4_m <- 10^(upscalingModel[upscalingModel$name == 'q4flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q4flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q4flood_Htf_m',]$biascorrect
+  network$Htf_q10_m <- 10^(upscalingModel[upscalingModel$name == 'q10flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q10flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q10flood_Htf_m',]$biascorrect
+  network$Htf_q20_m <- 10^(upscalingModel[upscalingModel$name == 'q20flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q20flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q20flood_Htf_m',]$biascorrect
+  network$Htf_q50_m <- 10^(upscalingModel[upscalingModel$name == 'q50flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q50flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q50flood_Htf_m',]$biascorrect
+  network$Htf_q80_m <- 10^(upscalingModel[upscalingModel$name == 'q80flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q80flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q80flood_Htf_m',]$biascorrect
+  network$Htf_q90_m <- 10^(upscalingModel[upscalingModel$name == 'q90flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q90flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q90flood_Htf_m',]$biascorrect
+  network$Htf_q96_m <- 10^(upscalingModel[upscalingModel$name == 'q96flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q96flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q96flood_Htf_m',]$biascorrect
+  network$Htf_q98_m <- 10^(upscalingModel[upscalingModel$name == 'q98flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q98flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q98flood_Htf_m',]$biascorrect
+  network$Htf_q99_m <- 10^(upscalingModel[upscalingModel$name == 'q99flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q99flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q99flood_Htf_m',]$biascorrect
+  network$Htf_q99_5_m <- 10^(upscalingModel[upscalingModel$name == 'q99_5flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q99_5flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q99_5flood_Htf_m',]$biascorrect
+  network$Htf_q99_8_m <- 10^(upscalingModel[upscalingModel$name == 'q99_8flood_Htf_m',]$coef +  (upscalingModel[upscalingModel$name == 'q99_8flood_Htf_m',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q99_8flood_Htf_m',]$biascorrect
+
+  #upscaling flood discharges (for residence time calculation)
+  network$Q_q0_2_cms <- 10^(upscalingModel[upscalingModel$name == 'q0_2flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q0_2flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q0_2flood_Q_cms',]$biascorrect
+  network$Q_q0_5_cms <- 10^(upscalingModel[upscalingModel$name == 'q0_5flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q0_5flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q0_5flood_Q_cms',]$biascorrect
+  network$Q_q1_cms <- 10^(upscalingModel[upscalingModel$name == 'q1flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q1flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q1flood_Q_cms',]$biascorrect
+  network$Q_q2_cms <- 10^(upscalingModel[upscalingModel$name == 'q2flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q2flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q2flood_Q_cms',]$biascorrect
+  network$Q_q4_cms <- 10^(upscalingModel[upscalingModel$name == 'q4flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q4flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q4flood_Q_cms',]$biascorrect
+  network$Q_q10_cms <- 10^(upscalingModel[upscalingModel$name == 'q10flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q10flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q10flood_Q_cms',]$biascorrect
+  network$Q_q20_cms <- 10^(upscalingModel[upscalingModel$name == 'q20flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q20flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q20flood_Q_cms',]$biascorrect
+  network$Q_q50_cms <- 10^(upscalingModel[upscalingModel$name == 'q50flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q50flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q50flood_Q_cms',]$biascorrect
+  network$Q_q80_cms <- 10^(upscalingModel[upscalingModel$name == 'q80flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q80flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q80flood_Q_cms',]$biascorrect
+  network$Q_q90_cms <- 10^(upscalingModel[upscalingModel$name == 'q90flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q90flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q90flood_Q_cms',]$biascorrect
+  network$Q_q96_cms <- 10^(upscalingModel[upscalingModel$name == 'q96flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q96flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q96flood_Q_cms',]$biascorrect
+  network$Q_q98_cms <- 10^(upscalingModel[upscalingModel$name == 'q98flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q98flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q98flood_Q_cms',]$biascorrect
+  network$Q_q99_cms <- 10^(upscalingModel[upscalingModel$name == 'q99flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q99flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q99flood_Q_cms',]$biascorrect
+  network$Q_q99_5_cms <- 10^(upscalingModel[upscalingModel$name == 'q99_5flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q99_5flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q99_5flood_Q_cms',]$biascorrect
+  network$Q_q99_8_cms <- 10^(upscalingModel[upscalingModel$name == 'q99_8flood_Q_cms',]$coef +  (upscalingModel[upscalingModel$name == 'q99_8flood_Q_cms',]$exp*log10(network$TotDASqKm))) * upscalingModel[upscalingModel$name == 'q99_8flood_Q_cms',]$biascorrect
 
   network <- network %>%
     dplyr::filter(AreaSqKm > 0) %>%
@@ -658,17 +748,6 @@ buildNetworkModel <- function(huc4, upscalingModel, BHGmodel, basinData) {
     dplyr::relocate(WBArea_Permanent_Identifier, .after=waterbody_type) %>%
     dplyr::relocate(WBAreaSqKm, .after=WBArea_Permanent_Identifier) %>%
     dplyr::select(!FType)
-
-  # lookup <- basinData$waterbodyLookUp %>%
-  #   dplyr::filter(!(is.na(NHDPlusID_reach))) %>%
-  #   dplyr::select(c('NHDPlusID_reach', 'waterbody_type'))
-
-  # network <- network %>%
-  #   dplyr::left_join(lookup, by=c('NHDPlusID'='NHDPlusID_reach'))
-  # network$waterbody_type <- ifelse(is.na(network$waterbody_type), 'floodplain',
-  #                               ifelse(network$waterbody_type == '466', 'wetland',
-  #                                   ifelse(network$waterbody_type == '436', 'reservoir',
-  #                                        ifelse(network$waterbody_type == '390', 'lake', 'other'))))
   
   return(network)
 }
@@ -684,7 +763,7 @@ runNetworkModel <- function(huc4, basinData, network){
   #run embarresingly parallel inundation model
   inundationWrapper <- function(reach) {
     #lower bound on dem resolution (also, these small rivers don't reallllly have floodplains, right?)
-    if(reach$Wb_m <= 10 | reach$waterbody_type == 'lake/reservoir'){
+    if(reach$Wb_m <= 30 | reach$waterbody_type == 'lake/reservoir'){
       reach[,c('A_qFEMA_m2', 'A_q0_2_m2', 'A_q0_5_m2', 'A_q1_m2', 'A_q2_m2', 'A_q4_m2', 'A_q10_m2', 'A_q20_m2', 'A_q50_m2', 'A_q80_m2', 'A_q90_m2', 'A_q96_m2', 'A_q98_m2', 'A_q99_m2', 'A_q99_5_m2', 'A_q99_8_m2')] <-NA
       reach[,c('V_qFEMA_m3', 'V_q0_2_m3', 'V_q0_5_m3', 'V_q1_m3', 'V_q2_m3', 'V_q4_m3', 'V_q10_m3', 'V_q20_m3', 'V_q50_m3', 'V_q80_m3', 'V_q90_m3', 'V_q96_m3', 'V_q98_m3', 'V_q99_m3', 'V_q99_5_m3', 'V_q99_8_m3')] <- NA
       return(reach)
@@ -733,8 +812,6 @@ runNetworkModel <- function(huc4, basinData, network){
         flood_vols <- flood_depths * flooded_pixels_cellsize #m3
         flood_vol_m3 <- terra::global(flood_vols, fun="sum", na.rm=T)
 
-        #flood_depths <- terra::global(flood_depths, fun="sum", na.rm=T)
-        #flood_vol_m3 <- flood_depths * flood_area_m2
         flood_vol_m3 <- flood_vol_m3[[1]]
       }
       else{
@@ -771,75 +848,84 @@ runNetworkModel <- function(huc4, basinData, network){
 
 
 
+# calcHRT <- function(df){
+#   #Get floodplain volume
+#   df$Vf_q0_2_m3 <- df$V_q0_2_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q0_2_m)
+#   df$Vf_q0_5_m3 <- df$V_q0_5_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q0_5_m)
+#   df$Vf_q1_m3 <- df$V_q1_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q1_m)
+#   df$Vf_q2_m3 <- df$V_q2_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q2_m)
+#   df$Vf_q4_m3 <- df$V_q4_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q4_m)
+#   df$Vf_q10_m3 <- df$V_q10_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q10_m)
+#   df$Vf_q20_m3 <- df$V_q20_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q20_m)
+#   df$Vf_q50_m3 <- df$V_q50_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q50_m)
+#   df$Vf_q80_m3 <- df$V_q80_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q80_m)
+#   df$Vf_q90_m3 <- df$V_q90_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q90_m)
+#   df$Vf_q96_m3 <- df$V_q96_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q96_m)
+#   df$Vf_q98_m3 <- df$V_q98_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q98_m)
+#   df$Vf_q99_m3 <- df$V_q99_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q99_m)
+#   df$Vf_q99_5_m3 <- df$V_q99_5_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q99_5_m)
+#   df$Vf_q99_8_m3 <- df$V_q99_8_m3 - (df$Wb_m*df$LengthKM*1000*df$Htf_q99_8_m)
 
-# biasCorrectModel <- function(val_FEMA, basinAnalysis){
-#   val_FEMA_area <- val_FEMA %>%
-#     sf::st_drop_geometry() %>%
-#     dplyr::filter(A_femaAEP_km2 > 0 & A_qFEMA_km2 > 0)
+#   #hydraulic residence time across entire flow
+#   df$HRTtf_q0_2_s <- df$V_q0_2_m3 / df$Q_q0_2_cms
+#   df$HRTtf_q0_5_s <- df$V_q0_5_m3 / df$Q_q0_5_cms
+#   df$HRTtf_q1_s <- df$V_q1_m3 / df$Q_q1_cms
+#   df$HRTtf_q2_s <- df$V_q2_m3 / df$Q_q2_cms
+#   df$HRTtf_q4_s <- df$V_q4_m3 / df$Q_q4_cms
+#   df$HRTtf_q10_s <- df$V_q10_m3 / df$Q_q10_cms
+#   df$HRTtf_q20_s <- df$V_q20_m3 / df$Q_q20_cms
+#   df$HRTtf_q50_s <- df$V_q50_m3 / df$Q_q50_cms
+#   df$HRTtf_q80_s <- df$V_q80_m3 / df$Q_q80_cms
+#   df$HRTtf_q90_s <- df$V_q90_m3 / df$Q_q90_cms
+#   df$HRTtf_q96_s <- df$V_q96_m3 / df$Q_q96_cms
+#   df$HRTtf_q98_s <- df$V_q98_m3 / df$Q_q98_cms
+#   df$HRTtf_q99_s <- df$V_q99_m3 / df$Q_q99_cms
+#   df$HRTtf_q99_5_s <- df$V_q99_5_m3 / df$Q_q99_5_cms
+#   df$HRTtf_q99_8_s <- df$V_q99_8_m3 / df$Q_q99_8_cms
 
-#   bias_correct <- Metrics::bias(log(val_FEMA_area$A_qFEMA_km2), log(val_FEMA_area$A_femaAEP_km2))
+#   #channel hydraulic residence time at a characteristic flow via the divided channel method
+#   df$HRTc_q0_2_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q0_2_m) / ((df$Htf_q0_2_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q0_5_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q0_5_m) / ((df$Htf_q0_5_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q1_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q1_m) / ((df$Htf_q1_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q2_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q2_m) / ((df$Htf_q2_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q4_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q4_m) / ((df$Htf_q4_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q10_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q10_m) / ((df$Htf_q10_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q20_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q20_m) / ((df$Htf_q20_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q50_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q50_m) / ((df$Htf_q50_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q80_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q80_m) / ((df$Htf_q80_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q90_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q90_m) / ((df$Htf_q90_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q96_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q96_m) / ((df$Htf_q96_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q98_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q98_m) / ((df$Htf_q98_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q99_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q99_m) / ((df$Htf_q99_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q99_5_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q99_5_m) / ((df$Htf_q99_5_m*df$Qb_cms) / (df$Hb_m))
+#   df$HRTc_q99_8_s <- (df$Wb_m*df$LengthKM*1000*df$Htf_q99_8_m) / ((df$Htf_q99_8_m*df$Qb_cms) / (df$Hb_m))
 
-#   for_area <- basinAnalysis %>%
-#     sf::st_drop_geometry()%>%
-#     dplyr::select(c('NHDPlusID', c('A_q0_2_m2', 'A_q0_5_m2', 'A_q1_m2', 'A_q2_m2', 'A_q4_m2', 'A_q10_m2', 'A_q20_m2', 'A_q50_m2', 'A_q80_m2', 'A_q90_m2', 'A_q96_m2', 'A_q98_m2', 'A_q99_m2', 'A_q99_5_m2', 'A_q99_8_m2')))%>%
-#     tidyr::pivot_longer(c('A_q0_2_m2', 'A_q0_5_m2', 'A_q1_m2', 'A_q2_m2', 'A_q4_m2', 'A_q10_m2', 'A_q20_m2', 'A_q50_m2', 'A_q80_m2', 'A_q90_m2', 'A_q96_m2', 'A_q98_m2', 'A_q99_m2', 'A_q99_5_m2', 'A_q99_8_m2'), names_to="perc", values_to="area_m2") %>%
-#     dplyr::mutate(perc = substr(perc, 3, nchar(perc)-3))  
+#   #floodplain hydraulic residence time at a characteristic flow via the divided channel method
+#   df$HRTf_q0_2_s <- df$Vf_q0_2_m3 / ((df$Q_q0_2_cms) - ((df$Htf_q0_2_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q0_5_s <- df$Vf_q0_5_m3 / ((df$Q_q0_5_cms) - ((df$Htf_q0_5_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q1_s <- df$Vf_q1_m3 / ((df$Q_q1_cms) - ((df$Htf_q1_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q2_s <- df$Vf_q2_m3 / ((df$Q_q2_cms) - ((df$Htf_q2_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q4_s <- df$Vf_q4_m3 / ((df$Q_q4_cms) - ((df$Htf_q4_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q10_s <- df$Vf_q10_m3 / ((df$Q_q10_cms) - ((df$Htf_q10_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q20_s <- df$Vf_q20_m3 / ((df$Q_q20_cms) - ((df$Htf_q20_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q50_s <- df$Vf_q50_m3 / ((df$Q_q50_cms) - ((df$Htf_q50_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q80_s <- df$Vf_q80_m3 / ((df$Q_q80_cms) - ((df$Htf_q80_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q90_s <- df$Vf_q90_m3 / ((df$Q_q90_cms) - ((df$Htf_q90_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q96_s <- df$Vf_q96_m3 / ((df$Q_q96_cms) - ((df$Htf_q96_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q98_s <- df$Vf_q98_m3 / ((df$Q_q98_cms) - ((df$Htf_q98_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q99_s <- df$Vf_q99_m3 / ((df$Q_q99_cms) - ((df$Htf_q99_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q99_5_s <- df$Vf_q99_5_m3 / ((df$Q_q99_5_cms) - ((df$Htf_q99_5_m*df$Qb_cms) / (df$Hb_m)))
+#   df$HRTf_q99_8_s <- df$Vf_q99_8_m3 / ((df$Q_q99_8_cms) - ((df$Htf_q99_8_m*df$Qb_cms) / (df$Hb_m)))
 
-#   for_vol <- basinAnalysis %>%
-#     sf::st_drop_geometry()%>%
-#     dplyr::select(c('NHDPlusID', 'V_q0_2_m3', 'V_q0_5_m3', 'V_q1_m3', 'V_q2_m3', 'V_q4_m3', 'V_q10_m3', 'V_q20_m3', 'V_q50_m3', 'V_q80_m3', 'V_q90_m3', 'V_q96_m3', 'V_q98_m3', 'V_q99_m3', 'V_q99_5_m3', 'V_q99_8_m3'))%>%
-#     tidyr::pivot_longer(c('V_q0_2_m3', 'V_q0_5_m3', 'V_q1_m3', 'V_q2_m3', 'V_q4_m3', 'V_q10_m3', 'V_q20_m3', 'V_q50_m3', 'V_q80_m3', 'V_q90_m3', 'V_q96_m3', 'V_q98_m3', 'V_q99_m3', 'V_q99_5_m3', 'V_q99_8_m3'), names_to="perc", values_to="vol_m3") %>%
-#     dplyr::mutate(perc = substr(perc, 3, nchar(perc)-3))
-
-#   for_biascorrect <- for_area %>%
-#     dplyr::left_join(for_vol, by=c('NHDPlusID', 'perc'))
-
-#    models_r2 <- for_biascorrect %>%
-#     dplyr::group_by(perc) %>%
-#     dplyr::mutate(broom::glance(lm(log(vol_m3) ~ log(area_m2)))) %>%
-#     dplyr::summarise(n=sum(!(is.na(vol_m3))),
-#                     rsq = mean(adj.r.squared, na.rm=T)) %>% #mean to pass the constant through
-#     dplyr::select(c(perc, n, rsq))
-
-#   models <- for_biascorrect %>%
-#     dplyr::group_by(perc) %>%
-#     dplyr::group_modify(~ broom::tidy(lm(log(vol_m3) ~ log(area_m2), data = .x))) %>%
-#     dplyr::select(perc:std.error) %>%
-#     dplyr::left_join(models_r2, by='perc') %>%
-#     tidyr::pivot_wider(names_from=term, values_from=c(estimate, std.error, n, rsq)) %>%
-#     dplyr::select(c('perc', 'estimate_(Intercept)','estimate_log(area_m2)', 'std.error_(Intercept)', 'std.error_log(area_m2)', 'n_(Intercept)', 'rsq_(Intercept)'))
-
-#   for_biascorrect <- for_biascorrect %>%
-#     dplyr::left_join(models, by='perc') %>%
-#     dplyr::mutate(A_model_m2_biascorrected = exp(log(area_m2)+bias_correct)) %>%
-#     dplyr::mutate(V_model_m3_biascorrect = exp(`estimate_(Intercept)`)*A_model_m2_biascorrected^`estimate_log(area_m2)`) %>%
-#     dplyr::select(c('NHDPlusID', 'perc', 'A_model_m2_biascorrected', 'V_model_m3_biascorrect')) %>%
-#     dplyr::mutate(area_perc = paste0('A_',perc, '_bc_m2'),
-#                 vol_perc = paste0('V_',perc, '_bc_m3'))
-
-#   for_area_fin <- for_biascorrect %>%
-#     dplyr::select(c('NHDPlusID', 'area_perc', 'A_model_m2_biascorrected')) %>%
-#     tidyr::pivot_wider(names_from = 'area_perc', values_from='A_model_m2_biascorrected')
-
-#   for_vol_fin <- for_biascorrect %>%
-#       dplyr::select(c('NHDPlusID', 'vol_perc', 'V_model_m3_biascorrect')) %>%
-#       tidyr::pivot_wider(names_from = 'vol_perc', values_from='V_model_m3_biascorrect')
-  
-
-#   #add bias corrected results to model df
-#   basinAnalysis <- basinAnalysis %>%
-#     dplyr::left_join(for_area_fin, by='NHDPlusID') %>%
-#     dplyr::left_join(for_vol_fin, by='NHDPlusID')
-  
-
-#   return(basinAnalysis)
+#   return(df)
 # }
 
 
 
-hortonScaling <- function(basinAnalysis, huc4, flag){
-  basinAnalysis <- basinAnalysis %>%
-    dplyr::filter(barrier_flag == flag)
+
+
+
+hortonScaling <- function(basinAnalysis, huc4){
 
   scaledBasin <- basinAnalysis %>%
     sf::st_drop_geometry() %>%
@@ -868,12 +954,11 @@ hortonScaling <- function(basinAnalysis, huc4, flag){
   #prep output
   scaledBasin <- scaledBasin %>%
     dplyr::mutate('huc4'=huc4,
-                'barrier_flag'=flag,
                 'Hf_avg_by_order_cm_fin'=(Vf_by_order_km3_fin / Af_by_order_km2_fin / (Af_by_order_km2_fin*1e6/100))*100000, #100m2 cell size
                 'area_model_r2'=summary(area_model)$r.squared,
                 'vol_model_r2'=summary(vol_model)$r.squared,
                 'vol_all_model_r2'=summary(vol_model_all)$r.squared) %>%
-    dplyr::select(c('huc4', 'barrier_flag', 'StreamCalc', 'frac', 'area_model_r2', 'vol_model_r2', 'vol_all_model_r2', 'Af_by_order_km2_fin', 'Vf_by_order_km3_fin', 'V_by_order_km3_fin', 'Hf_avg_by_order_cm_fin'))
+    dplyr::select(c('huc4', 'StreamCalc', 'frac', 'area_model_r2', 'vol_model_r2', 'vol_all_model_r2', 'Af_by_order_km2_fin', 'Vf_by_order_km3_fin', 'V_by_order_km3_fin', 'Hf_avg_by_order_cm_fin'))
 
   return(scaledBasin)
 }
@@ -889,43 +974,58 @@ regulateFlooding <- function(basinAnalysis, barriers, area_thresh_perc, huc4id, 
 
   basins <- basinAnalysis
 
-  basins <- basins %>%
+  basins_all <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'),layer = 'NHDFlowline',quiet = TRUE) %>%
+    sf::st_zm() %>%
     dplyr::left_join(network_VAA, by='NHDPlusID')
 
-  basins_all <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'),layer = 'NHDFlowline',quiet = TRUE) %>%
+  basins <- basins %>%
+    dplyr::select(!'TotDASqKm') %>%
     dplyr::left_join(network_VAA, by='NHDPlusID')
 
   huc_shp <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU4.shp')) %>%
      dplyr::filter(huc4 == huc4id)
 
   #join Global Dam Watch Database to nhd
-  barriers <- sf::st_read('data/path_to_data/CONUS_sediment_data/GDW_barriers_v1_0.shp') %>%
-    dplyr::filter(INSTREAM == 'Instream') %>%
+  barriers <- barriers %>% #sf::st_read('data/path_to_data/CONUS_sediment_data/GDW_barriers_v1_0.shp') %>%
     sf::st_transform(crs=sf::st_crs(basins_all)) %>%
-    sf::st_crop(huc_shp) %>%
-    dplyr::select(c('GDW_ID', 'DAM_NAME', 'MAIN_USE', 'CATCH_SKM'))
+    sf::st_crop(huc_shp)
 
   buffered_barriers <- barriers %>%
     sf::st_buffer(snapping_thresh)
   
-  barriers_fin <- buffered_barriers %>%
+  barriers_init <- buffered_barriers %>%
     sf::st_join(basins_all) %>%
     sf::st_drop_geometry() %>%
-    dplyr::filter(abs(CATCH_SKM-TotDASqKm)/CATCH_SKM <= area_thresh_perc & is.na(CATCH_SKM)==0) %>%
-    dplyr::group_by(GDW_ID) %>% 
-    dplyr::slice_min(abs(CATCH_SKM-TotDASqKm)/CATCH_SKM) %>%
-    dplyr::ungroup() %>%
-    dplyr::select(c('GDW_ID', 'NHDPlusID', 'CATCH_SKM'))
+    dplyr::filter(abs(RESV_CATCH_SKM-TotDASqKm)/RESV_CATCH_SKM <= area_thresh_perc & is.na(RESV_CATCH_SKM)==0) %>%
+    dplyr::select(c('HYRIV_ID', 'NHDPlusID', 'RESV_CATCH_SKM'))
   
-    #sf::st_nearest_feature(basins_all)
- # distances <- sf::st_distance(barriers, basins_all[nearest_feature,], by_element = TRUE)
+  for_dist <- barriers %>%
+    dplyr::left_join(barriers_init, by='HYRIV_ID') %>%
+    dplyr::filter(is.na(NHDPlusID)==0)
 
-  # barriers$NHDPlusID <- basins_all[nearest_feature,]$NHDPlusID
-  # barriers$nhd_dist_m <- distances
+  #loop through dams and find the nhd reach closest to the barrier (after filtering for only reaches within 1km and within 5% drainage area agreeement)
+  for_dist2 <- for_dist %>%
+    dplyr::group_by(HYRIV_ID) %>%
+    dplyr::summarise(n=n())
+  
+  out <- NA
+  for(i in for_dist2$HYRIV_ID){
+      ids <- for_dist[for_dist$HYRIV_ID == i,]$NHDPlusID
+      check_reaches <- basins_all[basins_all$NHDPlusID %in% ids,]
 
-  # barriers <- barriers %>%
-  #   sf::st_drop_geometry() %>%
-  #   dplyr::filter(as.numeric(nhd_dist_m) <= snapping_thresh)
+      nearest_reach <- check_reaches[sf::st_nearest_feature(for_dist2[for_dist2$HYRIV_ID == i,], check_reaches),]
+      out <- c(out, nearest_reach$NHDPlusID)
+  }
+
+  barriers_fin <- barriers_init %>%
+    dplyr::filter(NHDPlusID %in% out) %>%
+    dplyr::select(c('NHDPlusID', 'RESV_CATCH_SKM'))
+    
+    
+    # dplyr::group_by(NHDPlusID) %>% 
+    # #dplyr::slice_min(abs(RESV_CATCH_SKM-TotDASqKm)/RESV_CATCH_SKM) %>%
+    # dplyr::ungroup() %>%
+    # dplyr::select(c('NHDPlusID', 'RESV_CATCH_SKM'))
 
   #runs asynchrounsouly for reach i using doparallel
   effContrbWrapper <- function(basin, basins_all){
@@ -938,33 +1038,25 @@ regulateFlooding <- function(basinAnalysis, barriers, area_thresh_perc, huc4id, 
         dplyr::filter(ToNode %in% ids_vec) %>%
         dplyr::left_join(barriers_fin, by='NHDPlusID') %>%
         dplyr::group_by(NHDPlusID) %>% #can have multiple dams on a reach, so just keep the most downstream one (see next line)
-        dplyr::slice_max(CATCH_SKM) %>%
+        dplyr::slice_max(TotDASqKm) %>%
         dplyr::ungroup() %>%
-        dplyr::mutate(RESV_CATCH_SKM = ifelse(is.na(CATCH_SKM), 0, CATCH_SKM))
-      
+        dplyr::mutate(RESV_CATCH_SKM = ifelse(RESV_CATCH_SKM > 0, TotDASqKm, NA)) #for consistency, use the nhd drainage area
+
       #if a reservoir is found, store that catchment area away and stop crawling that part of the network
       if(sum(up_basins$RESV_CATCH_SKM, na.rm=T) > 0){
           temp <- up_basins %>%
-            dplyr::filter(RESV_CATCH_SKM > 0) %>%
-            dplyr::select(c('FromNode', 'RESV_CATCH_SKM'))#, 'MAIN_USE'))
+            dplyr::filter(RESV_CATCH_SKM > 0 & is.na(RESV_CATCH_SKM)==0) %>%
+            dplyr::select(c('NHDPlusID', 'FromNode', 'RESV_CATCH_SKM'))
           lookup <- rbind(lookup, temp)
 
           #remove that basin from the list of crawling basins
           up_basins <- up_basins %>%
-            dplyr::filter(RESV_CATCH_SKM == 0)
+            dplyr::filter(!(NHDPlusID %in% temp$NHDPlusID))
         }
       ids_vec <- up_basins$FromNode
     }
-
-    # lookup <- lookup %>%
-    #   dplyr::group_by(MAIN_USE) %>%
-    #   dplyr::summarise(regulatedDA_skm = sum(RESV_CATCH_SKM, na.rm=T)) %>%
-    #   tidyr::spread(key=MAIN_USE, value=regulatedDA_skm)
-      
-    # colnames(lookup) <- paste0('regulatedDA_skm_', colnames(lookup))
-    
-    # basin <- cbind(basin, lookup)
-
+    lookup <- lookup[!duplicated(lookup),]
+  print(lookup)
     basin$regulatedDA_skm <- sum(lookup$RESV_CATCH_SKM, na.rm=T)
 
     return(basin)

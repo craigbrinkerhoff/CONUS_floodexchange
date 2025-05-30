@@ -1,3 +1,3 @@
 library(targets)
 
-tar_make(regulationFig)
+tar_make()

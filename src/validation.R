@@ -8,7 +8,7 @@
 
 
 
-prepFEMA <- function(){
+prepFEMA <- function(dummy_to_rerun){
     #read in fema
     states <- list.files('data/path_to_data/CONUS_connectivity_data/CONUS_FEMA')
 
@@ -108,7 +108,8 @@ valModelFEMA <- function(huc4id, preppedFEMA, basinAnalysis, basinData){
         dplyr::left_join(fema_shp, by='NHDPlusID') %>%
         dplyr::left_join(gageLookup, by='NHDPlusID') %>%
         dplyr::relocate(GageID, .after=NHDPlusID) %>%
-        tidyr::drop_na(A_femaAEP_km2) #a few edge cases where  fema shp is 0 km2, but just brushes against model catchment and intersects --> NA fema area. SO remove them.
+        tidyr::drop_na(A_femaAEP_km2) %>% #a few edge cases where  fema shp is 0 km2, but just brushes against model catchment and intersects --> NA fema area. SO remove them.
+        sf::st_drop_geometry()
 
     return(out)  
 }
@@ -219,6 +220,8 @@ valModelUSGSvols <- function(huc4id, basinAnalysis_orig, val_USGS, modeled_flow_
     if(length(files)==0){
         return(data.frame())
     }
+
+    dummy <- 1 #force rerun :)
 
     out <- data.frame()
     for(i in files){
