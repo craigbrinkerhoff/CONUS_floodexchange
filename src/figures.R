@@ -516,7 +516,65 @@ makeRegulationFig <- function(model_combined, flow_perc){
 
 
 
-plotValidationQexc <- function(gageQexc_val) {
+
+
+
+# makeValUSGSvolCombined <- function(val_USGSvols_combined){    
+#     library(ggplot2)
+#     theme_set(theme_classic())
+
+#     #make inundated area val df
+#     val_USGS_vol <- val_USGSvols_combined %>%
+#         sf::st_drop_geometry() %>%
+#         dplyr::filter(V_usgs_km3 > 0 & V_model_km3 > 0) %>%
+#         dplyr::mutate(plot_var = factor(key_exdprob, c('V_q0_2', 'V_q0_5', 'V_q1', 'V_q2', 'V_q4', 'V_q10', 'V_q20', 'V_q50'), labels=c('0.2% flood', '0.5% flood', '1% flood', '2% flood', '4% flood', '10% flood', '20% flood', '50% flood')))
+
+#     #get r2 and num reaches for each characteristic flood
+#     df_r2 <- val_USGS_vol %>%
+#         dplyr::group_by(plot_var) %>%
+#         dplyr::group_modify(~ broom::glance(lm(log10(V_model_km3) ~ log10(V_usgs_km3), data = .x))) %>% 
+#         dplyr::select(c('plot_var', 'r.squared'))
+    
+#     df_num <- val_USGS_vol %>%
+#         dplyr::group_by(plot_var) %>%
+#         dplyr::summarise(n=n())
+    
+#     lookup <- df_r2 %>%
+#         dplyr::left_join(df_num, by='plot_var') %>%
+#         dplyr::mutate(r2fin = sprintf("italic(R^2) == %.2f", r.squared),
+#                     nfin = paste0(n, ' reaches'))
+
+#     #plot
+#     scatter_vol <- ggplot(val_USGS_vol, aes(x=V_usgs_km3*1e9, y=V_model_km3*1e9))+#, color=key_bias))+
+#         geom_point(size=5, color='#a39171') +
+#         geom_abline(linewidth=2, color='darkgrey', linetype='dashed') +
+#         geom_smooth(color='black', method='lm', se=F, linewidth=1.25) +
+#         # scale_color_manual(name='', labels=c('Model', 'Bias Corrected Model'), values=c('#81b29a', '#3d405b'))+
+#         scale_x_log10(guide = "axis_logticks", limits=c(1e2, 1e7), breaks=c(1e2, 1e3, 1e4, 1e5, 1e6, 1e7), labels = scales::label_log(base=10))+
+#         scale_y_log10(guide = "axis_logticks", limits=c(1e2, 1e7), breaks=c(1e2, 1e3, 1e4, 1e5, 1e6, 1e7), labels = scales::label_log(base=10))+
+#         xlab(bquote(bold("USGS-hydrodynamic inundated volume ["*m^3*"]"))) +
+#         ylab(bquote(bold("Modeled inundated volume ["*m^3*"]"))) +
+#         theme(axis.title = element_text(face = 'bold', size=18),
+#             axis.text = element_text(size=15),
+#             strip.text = element_text(size=22),
+#             axis.line = element_blank(),
+#             panel.grid.major = element_blank(),
+#             panel.grid.minor = element_blank(),
+#             strip.background = element_blank(),
+#             panel.border = element_rect(colour = "black", fill = NA),
+#             legend.position='bottom',
+#             legend.text=element_text(size=15)) +
+#         facet_wrap(vars(plot_var), nrow=2)+
+#         geom_text(x=3, y=6, aes(label=r2fin), data=lookup, parse=TRUE, size=5)+
+#         geom_text(x=3, y=6.5, aes(label=nfin), data=lookup, size=5)
+
+#     ggsave('cache/validationUSGS_vol.png', scatter_vol, width=16, height=10)
+
+#     return(val_USGSvols_combined)
+# }
+
+
+makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){    
     library(ggplot2)
     theme_set(theme_classic())
 
@@ -527,42 +585,44 @@ plotValidationQexc <- function(gageQexc_val) {
         dplyr::filter(Qexc_m3dy > 0) %>%
         tidyr::pivot_wider(id_cols=site_no, names_from=flag, values_from=c('Qexc_m3dy'))
 
-    # lm <- lm(log10(event_avg_floodQ_model)~log10(event_avg_floodQ_obs), data=df)
-    # plot1 <- ggplot(df, aes(x=event_avg_floodQ_obs, y=event_avg_floodQ_model)) +
-    #     geom_abline(linewidth=2, color='darkgrey', linetype='dashed') +
-    #     geom_point(fill='darkgreen', pch=21, size=10, color='black') +
-    #     geom_smooth(method='lm', se=F, color='black', linewidth=2)+
-    #    # scale_fill_brewer(palette='Set3', name='')+
-    #     annotate("text", x = 10^4.5, y = 10^8, label = bquote(R^2*'= '*.(round(summary(lm)$r.squared,2))), size=6)+
-    #     annotate("text", x = 10^4.5, y = 10^7.75, label = bquote(n*'= '*.(nrow(df))), size=6)+
-    #     scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10))+
-    #     scale_y_log10(guide = "axis_logticks",  labels = scales::label_log(base=10))+
-    #    # coord_cartesian(xlim=c(1,2.5), ylim=c(1,2.5))+
-    #     ylab(bquote(bold('Modeled mean flood Q ['~m^3/s~']')))+
-    #     xlab(bquote(bold('Observed mean flood Q ['~m^3/s~']')))+
-    #     labs(tag='A')+
-    #     theme(axis.title = element_text(size=20, face='bold'))+
-    #     theme(legend.position=c(0.8,0.3),
-    #         panel.border = element_rect(colour = "black", fill = NA),
-    #         axis.line = element_blank())+
-    #     theme(axis.text = element_text(family = "Futura-Medium", size=18),
-    #         legend.text = element_text(family = "Futura-Medium", size = 18),
-    #         plot.tag = element_text(size=22,
-    #                                 face='bold'))
-
-    lm <- lm(log10(Qexc_m3dy_model)~log10(Qexc_m3dy_obs), data=df)
-    plot2 <- ggplot(df, aes(x=Qexc_m3dy_obs, y= Qexc_m3dy_model)) +
+    lm <- lm(log10(model)~log10(obs), data=df)
+    plot1 <- ggplot(df, aes(x=obs, y= model)) +
         geom_abline(linewidth=2, color='darkgrey', linetype='dashed') +
         geom_point(fill='darkred', pch=21, size=10, color='black') +
         geom_smooth(method='lm', se=F, color='black', linewidth=2)+
-       # scale_fill_brewer(palette='Set3', name='')+
-        annotate("text", x = 10^4.5, y = 10^8, label = bquote(R^2*'= '*.(round(summary(lm)$r.squared,2))), size=6)+
-        annotate("text", x = 10^4.5, y = 10^7.75, label = bquote(n*'= '*.(nrow(df))), size=6)+
-        scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10))+
-        scale_y_log10(guide = "axis_logticks",  labels = scales::label_log(base=10))+
-       # coord_cartesian(xlim=c(0,2), ylim=c(0,2))+
-        ylab(bquote(bold('Modeled mean exchange flux ['~m^3/dy~']')))+
-        xlab(bquote(bold('Observed mean exchange flux ['~m^3/dy~']')))+
+        annotate("text", x = 10^4.5, y = 10^7.5, label = bquote(R^2*'= '*.(round(summary(lm)$r.squared,2))), size=6)+
+        annotate("text", x = 10^4.5, y = 10^7.25, label = bquote(n*'= '*.(nrow(df))), size=6)+
+        scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(10^3.75, 10^7.5))+
+        scale_y_log10(guide = "axis_logticks",  labels = scales::label_log(base=10), limits=c(10^3.75, 10^7.5))+
+        ylab(bquote(bold('Estimated mean floodplain flux ['~m^3/dy~']')))+
+        xlab(bquote(bold('Observed mean floodplain flux ['~m^3/dy~']')))+
+        labs(tag='A')+
+        theme(axis.title = element_text(size=20, face='bold'))+
+        theme(legend.position='none',
+            panel.border = element_rect(colour = "black", fill = NA),
+            axis.line = element_blank())+
+        theme(axis.text = element_text(family = "Futura-Medium", size=18),
+            legend.text = element_text(family = "Futura-Medium", size = 18),
+            plot.tag = element_text(size=26,
+                                    face='bold'))
+
+    forPlot <- gageVolume_val_combined %>%
+        dplyr::mutate(V_usgs_m3 = ifelse(V_usgs_m3 == 0, NA, V_usgs_m3),
+                    V_model_m3 = V_m3) %>%
+        tidyr::drop_na(V_model_m3, V_usgs_m3)
+
+    #plot
+    lm <- lm(log10(V_model_m3)~log10(V_usgs_m3), data=forPlot)
+    plot2 <- ggplot(forPlot, aes(x=V_usgs_m3, y=V_model_m3))+
+        geom_abline(linewidth=2, color='darkgrey', linetype='dashed') +
+        geom_point(pch=21, size=10, color='black', fill='#a39171') +
+        geom_smooth(color='black', method='lm', se=F, linewidth=1.25) +
+        annotate("text", x = 10^3, y = 10^7, label = bquote(R^2*'= '*.(round(summary(lm)$r.squared,2))), size=6)+
+        annotate("text", x = 10^3, y = 10^6.75, label = bquote(n*'= '*.(nrow(forPlot))), size=6)+
+        scale_x_log10(guide = "axis_logticks", limits=c(1e2, 1e7), breaks=c(1e2, 1e3, 1e4, 1e5, 1e6, 1e7), labels = scales::label_log(base=10))+
+        scale_y_log10(guide = "axis_logticks", limits=c(1e2, 1e7), breaks=c(1e2, 1e3, 1e4, 1e5, 1e6, 1e7), labels = scales::label_log(base=10))+
+        xlab(bquote(bold("USGS-hydrodynamic inundated volume ["*m^3*"]"))) +
+        ylab(bquote(bold("Estimated inundated volume ["*m^3*"]"))) +
         labs(tag='B')+
         theme(axis.title = element_text(size=20, face='bold'))+
         theme(legend.position='none',
@@ -570,137 +630,16 @@ plotValidationQexc <- function(gageQexc_val) {
             axis.line = element_blank())+
         theme(axis.text = element_text(family = "Futura-Medium", size=18),
             legend.text = element_text(family = "Futura-Medium", size = 18),
-            plot.tag = element_text(size=22,
+            plot.tag = element_text(size=26,
                                     face='bold'))
     
-    #     layout <- "
-    #     AB
-    # "
+    layout <- "
+    AB
+    "
 
-    # comboPlot <- patchwork::wrap_plots(A=plot1, B=plot2, design=layout)
+    combo_plot <- patchwork::wrap_plots(A=plot1, B=plot2, design=layout)
 
-    ggsave('cache/validationDischarge.png', plot2, width=10, height=10)
-}
-
-
-
-
-makeValUSGSvolCombined <- function(val_USGSvols_combined){    
-    library(ggplot2)
-    theme_set(theme_classic())
-
-    #make inundated area val df
-    val_USGS_vol <- val_USGSvols_combined %>%
-        sf::st_drop_geometry() %>%
-        dplyr::filter(V_usgs_km3 > 0 & V_model_km3 > 0) %>%
-        # dplyr::left_join(bias_correct, by='key_exdprob') %>%
-        # dplyr::mutate(V_model_km3_biascorrect = exp(log(V_model_km3) + bias)) %>%
-        # tidyr::gather(key=key_bias, value=value, c('V_model_km3', 'V_model_km3_biascorrect')) %>%
-        dplyr::mutate(plot_var = factor(key_exdprob, c('V_q0_2', 'V_q0_5', 'V_q1', 'V_q2', 'V_q4', 'V_q10', 'V_q20', 'V_q50'), labels=c('0.2% flood', '0.5% flood', '1% flood', '2% flood', '4% flood', '10% flood', '20% flood', '50% flood')))
-
-    #get r2 and num reaches for each characteristic flood
-    df_r2 <- val_USGS_vol %>%
-        # dplyr::filter(key_bias == 'V_model_km3_biascorrect') %>%
-        dplyr::group_by(plot_var) %>%
-        dplyr::group_modify(~ broom::glance(lm(log10(V_model_km3) ~ log10(V_usgs_km3), data = .x))) %>% 
-        dplyr::select(c('plot_var', 'r.squared'))
-    
-    df_num <- val_USGS_vol %>%
-        # dplyr::filter(key_bias == 'V_model_km3_biascorrect') %>%
-        dplyr::group_by(plot_var) %>%
-        dplyr::summarise(n=n())
-    
-    lookup <- df_r2 %>%
-        dplyr::left_join(df_num, by='plot_var') %>%
-        dplyr::mutate(r2fin = sprintf("italic(R^2) == %.2f", r.squared),
-                    nfin = paste0(n, ' reaches'))
-
-    #plot
-    scatter_vol <- ggplot(val_USGS_vol, aes(x=V_usgs_km3*1e9, y=V_model_km3*1e9))+#, color=key_bias))+
-        geom_point(size=5, color='#a39171') +
-        geom_abline(linewidth=2, color='darkgrey', linetype='dashed') +
-        geom_smooth(color='black', method='lm', se=F, linewidth=1.25) +
-        # scale_color_manual(name='', labels=c('Model', 'Bias Corrected Model'), values=c('#81b29a', '#3d405b'))+
-        scale_x_log10(guide = "axis_logticks", limits=c(1e2, 1e7), breaks=c(1e2, 1e3, 1e4, 1e5, 1e6, 1e7), labels = scales::label_log(base=10))+
-        scale_y_log10(guide = "axis_logticks", limits=c(1e2, 1e7), breaks=c(1e2, 1e3, 1e4, 1e5, 1e6, 1e7), labels = scales::label_log(base=10))+
-        xlab(bquote(bold("USGS-hydrodynamic inundated volume ["*m^3*"]"))) +
-        ylab(bquote(bold("Modeled inundated volume ["*m^3*"]"))) +
-        theme(axis.title = element_text(face = 'bold', size=18),
-            axis.text = element_text(size=15),
-            strip.text = element_text(size=22),
-            axis.line = element_blank(),
-            panel.grid.major = element_blank(),
-            panel.grid.minor = element_blank(),
-            strip.background = element_blank(),
-            panel.border = element_rect(colour = "black", fill = NA),
-            legend.position='bottom',
-            legend.text=element_text(size=15)) +
-        facet_wrap(vars(plot_var), nrow=2)+
-        geom_text(x=3, y=6, aes(label=r2fin), data=lookup, parse=TRUE, size=5)+
-        geom_text(x=3, y=6.5, aes(label=nfin), data=lookup, size=5)
-
-    ggsave('cache/validationUSGS_vol.png', scatter_vol, width=16, height=10)
-
-    return(val_USGSvols_combined)
-}
-
-
-makeVolValFig <- function(val_USGSvols_combined){    
-    library(ggplot2)
-    theme_set(theme_classic())
-
-    forPlot <- val_USGSvols_combined%>%
-        dplyr::mutate(V_usgs_m3 = ifelse(V_usgs_m3 == 0, NA, V_usgs_m3),
-                    V_model_m3 = V_m3) %>%
-        tidyr::drop_na(V_model_m3, V_usgs_m3)
-
-    #make inundated area val df
-    # val_USGS_vol <- val_USGSvols_combined %>%
-    #     sf::st_drop_geometry() %>%
-    #     dplyr::filter(V_usgs_km3 > 0 & V_model_km3 > 0) %>%
-    #     # dplyr::left_join(bias_correct, by='key_exdprob') %>%
-    #     # dplyr::mutate(V_model_km3_biascorrect = exp(log(V_model_km3) + bias)) %>%
-    #     # tidyr::gather(key=key_bias, value=value, c('V_model_km3', 'V_model_km3_biascorrect')) %>%
-    #     dplyr::mutate(plot_var = factor(key_exdprob, c('V_q0_2', 'V_q0_5', 'V_q1', 'V_q2', 'V_q4', 'V_q10', 'V_q20', 'V_q50'), labels=c('0.2% flood', '0.5% flood', '1% flood', '2% flood', '4% flood', '10% flood', '20% flood', '50% flood')))
-
-    # #get r2 and num reaches for each characteristic flood
-    # df_r2 <- val_USGS_vol %>%
-    #     # dplyr::filter(key_bias == 'V_model_km3_biascorrect') %>%
-    #     dplyr::group_by(plot_var) %>%
-    #     dplyr::group_modify(~ broom::glance(lm(log10(V_model_km3) ~ log10(V_usgs_km3), data = .x))) %>% 
-    #     dplyr::select(c('plot_var', 'r.squared'))
-    
-    # df_num <- val_USGS_vol %>%
-    #     # dplyr::filter(key_bias == 'V_model_km3_biascorrect') %>%
-    #     dplyr::group_by(plot_var) %>%
-    #     dplyr::summarise(n=n())
-    
-    # lookup <- df_r2 %>%
-    #     dplyr::left_join(df_num, by='plot_var') %>%
-    #     dplyr::mutate(r2fin = sprintf("italic(R^2) == %.2f", r.squared),
-    #                 nfin = paste0(n, ' reaches'))
-
-    #plot
-    scatter_vol <- ggplot(forPlot, aes(x=V_usgs_m3, y=V_model_m3))+
-        geom_point(pch=21, size=8, color='black', fill='#a39171') +
-        geom_abline(linewidth=2, color='darkgrey', linetype='dashed') +
-        geom_smooth(color='black', method='lm', se=F, linewidth=1.25) +
-        scale_x_log10(guide = "axis_logticks", limits=c(1e2, 1e7), breaks=c(1e2, 1e3, 1e4, 1e5, 1e6, 1e7), labels = scales::label_log(base=10))+
-        scale_y_log10(guide = "axis_logticks", limits=c(1e2, 1e7), breaks=c(1e2, 1e3, 1e4, 1e5, 1e6, 1e7), labels = scales::label_log(base=10))+
-        xlab(bquote(bold("USGS-hydrodynamic inundated volume ["*m^3*"]"))) +
-        ylab(bquote(bold("Modeled inundated volume ["*m^3*"]"))) +
-        theme(axis.title = element_text(face = 'bold', size=18),
-            axis.text = element_text(size=15),
-            strip.text = element_text(size=22),
-            axis.line = element_blank(),
-            panel.grid.major = element_blank(),
-            panel.grid.minor = element_blank(),
-            strip.background = element_blank(),
-            panel.border = element_rect(colour = "black", fill = NA),
-            legend.position='bottom',
-            legend.text=element_text(size=15))
-
-    ggsave('cache/validationVolume.png', scatter_vol, width=10, height=10)
+    ggsave('cache/validation_calculation.png', combo_plot, width=16, height=8)
 
     return(forPlot)
 }
