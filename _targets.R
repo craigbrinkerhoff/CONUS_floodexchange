@@ -14,12 +14,9 @@ library(ggplot2)
 library(tibble)
 
 #load functions
-#source("src/functions_floodplain.R")
 source('src/functions_v3.R')
-#source("src/validation.R")
 source('src/utils.R')
 source('src/figures.R')
-#source('src/validation_tau.R')
 
 ##BIG TO DOS
 #(3/21/25): Probably go back and make sure we are filtering and QAQC'ing the nhd properly..
@@ -34,6 +31,13 @@ gageRecordEnd <- '2023-12-31'
 minRecordLength <- 20 #[yrs] minimum number of years on record for a gage to be included
 minADCPMeas <- 20 #min depth stage adcp measurements for AHG
 minAHGr2 <- 0.30 #min depth AHG fit
+
+#ml parameters
+nInnerFolds <- 10
+nOuterFolds <- 5
+numGrid <- 5
+numRepeats <- 1
+
 #snapping_thresh <- 5000 #[m]
 #area_thresh_perc <- 0.10
 #minWidth <- 10 #m, minimum bankful river width to map inundation at gages (remember dem res is 10m)
@@ -42,34 +46,11 @@ minAHGr2 <- 0.30 #min depth AHG fit
 
 
 ###### DISTRIBUTED COMPUTING SETUP ######
-# tar_option_set(
-#   controller = crew_controller_local(workers = 6)
-# )
+#tar_option_set(
+#  controller = crew_controller_local(workers = 20)
+#)
 
-#local setup (used for all but the big jobs with internal parallelism)
-# controller_local <- crew_controller_local(
-#   name = "my_local_controller",
-#   workers = 3)
-
-# #slurm setup (to submit external, big jobs for the heft targets with internal parallelism)
-# controller_slurm <- crew_controller_slurm(
-#   name = "my_slurm_controller",
-#   workers = 1,
-#   options_cluster = crew.cluster::crew_options_slurm(#script_lines = "module load R",
-#                                                     partition = 'day',
-#                                                     memory_gigabytes_required = 180,
-#                                                     cpus_per_task = 35,
-#                                                     time_minutes = 60*12, #12hr time limit
-#                                                     log_output = "logs/crew_out_%A.txt",
-#                                                     log_error = "logs/crew_err_%A.txt"))
-
-# #define default settings
-# tar_option_set(
-#   controller = crew_controller_group(controller_local, controller_slurm),
-#   resources = tar_resources(
-#     crew = tar_resources_crew(controller = "my_local_controller")
-#   )
-# )
+vol_grids <- list.files('data/path_to_data/CONUS_connectivity_data/volume_validation/', pattern = "\\.tif$", full.names=TRUE)
 
 
 
@@ -77,7 +58,15 @@ minAHGr2 <- 0.30 #min depth AHG fit
 gageAnalysis <- tar_map(
   values = tibble( # Setup static branching
     method_function = rlang::syms(c("getBasinGages")),
-    huc4 = c('0101', '0102', '0103', '0104', '0105', '0106', '0107', '0108', '0109', '0110')
+    huc4 = c('0101', '0102', '0103', '0104', '0105', '0106', '0107', '0108', '0109', '0110',
+          '0202', '0203', '0204', '0205', '0206', '0207', '0208',
+          '0301', '0302', '0303', '0304', '0305', '0306', '0307', '0308', '0309', '0310', '0311', '0312', '0313', '0314', '0315', '0316', '0317', '0318',
+          #04 go here,
+          '0501', '0502', '0503', '0504', '0505', '0506', '0507', '0508', '0509', '0510', '0511', '0512', '0513', '0514',
+          '0601', '0602', '0603', '0604',
+          '0701', '0702','0703', '0704', '0705', '0706', '0707', '0708', '0709', '0710', '0711', '0712', '0713', '0714',
+          '0801', '0802', '0803', '0804', '0805', '0806', '0807', '0808', '0809',
+          '0901', '0902', '0903', '0904')
   ),
   names='huc4',
 
@@ -101,9 +90,15 @@ gageAnalysis <- tar_map(
   tar_target(gageFlux, buildGageFloodFunctions(huc4, BHGmodel, gageQexc, 'average of event means')), #the specifics of this calculation are hardcoded in gageQexc, but we add the description here
   tar_target(gageVolume, runDEMModel(huc4, gageFlux)),
 
-  ## VALIDATE VOLUME BATHTUB MODEL
+  ## PREP FOR ML
+  tar_target(gageForModel, addOtherNHDFeatures(gageVolume, huc4)),
+
+  ## PREP FOR MAPPING AND SUMMARIZING
+  tar_target(gage_df, makeGageDF(gage, gageForModel, huc4)),
+
+  ## VALIDATE VOLUME BATHTUB MODEL per HUC4
   tar_target(reaches_val, collectValReaches(huc4)),#grab reaches joined a priori to gage network (using gages as proxy for USGS volume model mainstems (b/c they are calibrated to these specific gages))
-  tar_target(depths_val, wrangleDepthGrids(huc4, reaches_val)),
+  tar_target(depths_val, wrangleDepthGrids(huc4, reaches_val, volVal)),
   tar_target(gageFlux_val, buildGageFloodFunctions_volumeval(huc4, BHGmodel, depths_val)), #also passes along the observed volumes, compared to the normal function above
   tar_target(gageVolume_val, runDEMModel(huc4, gageFlux_val))
 )
@@ -117,12 +112,23 @@ list(
 
   ## PREP FLOW BARRIER DATASET
   tar_target(GWD, prepGWD()),
-  
+
+  ## ASSIGN HUC4 TO VOLUME VALIDATION DATA
+  tar_target(volVal, assignVolVals(vol_grids)),
+
   ## RUN HUC4 ANALYSIS
   gageAnalysis,
 
   ## COMBINE HUC4 OBJECTS
   tar_combine(gageVolume_val_combined , gageAnalysis$gageVolume_val, command = dplyr::bind_rows(!!!.x)),
+  tar_combine(gageForModel_combined , gageAnalysis$gageForModel, command = dplyr::bind_rows(!!!.x)),
+  tar_combine(gages_df_combined, gageAnalysis$gage_df, command=dplyr::bind_rows(!!!.x)),
+
+  ## TRAIN ML MODELS
+  tar_target(model_V_eval, trainModelEval_V(gageForModel_combined, nInnerFolds, nOuterFolds, numGrid, numRepeats)),
+  tar_target(model_V, trainModelFin_V(gageForModel_combined, nInnerFolds, numGrid)),
+  tar_target(model_Q_eval, trainModelEval_Q(gageForModel_combined, nInnerFolds, nOuterFolds, numGrid, numRepeats)),
+  tar_target(model_Q, trainModelFin_Q(gageForModel_combined, nInnerFolds, numGrid)),
 
   #EXCHANGE TIME VALIDATION VIA JACKNIFE REGRESSION (more or less a LOOCV for the regression models)
   tar_target(BHGmodel_jacknife, modelsJacknifeBHG()),
@@ -142,7 +148,10 @@ list(
           iteration='list'),
 
   ##FIGURES
-  tar_target(fig_validationCalculation, makeCalculationValFig(gageVolume_val_combined, gageQexc_val))
+  tar_target(fig_validationCalculation, makeCalculationValFig(gageVolume_val_combined, gageQexc_val)), #incredbly few gages actually have both of these val data, and even then it's nearly impossible to match usgs stages with floods in the gage record perfectly. so we just validate the two halves independently
+  tar_target(fig_validationML, makeMLValFig(model_Q_eval, model_V_eval)),
+  tar_target(fig_gageMap, makeGageMap(gages_df_combined)),
+  tar_target(fig_VIP, makeVIPPlot(model_Q, model_V))
 
 
   ## PREP VALIDATION MAPS

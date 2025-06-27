@@ -1,5 +1,5 @@
 Warning message:
-package ‘targets’ was built under R version 4.4.2 
+package ‘targets’ was built under R version 4.4.3 
 
 Attaching package: ‘dplyr’
 
@@ -7,27 +7,3 @@ The following objects are masked from ‘package:base’:
 
     intersect, setdiff, setequal, union
 
-Error:
-! targets::tar_make() error
-
-── Debugging ───────────────────────────────────────────────────────────────────
-    • tar_errored()
-    • tar_meta(fields = any_of("error"), complete_only = TRUE)
-    • tar_workspace()
-    • tar_workspaces()
-
-── How to ──────────────────────────────────────────────────────────────────────
-    • Debug: https://books.ropensci.org/targets/debugging.html
-    • Help: https://books.ropensci.org/targets/help.html
-
-── Last error message ──────────────────────────────────────────────────────────
-    group length is 0 but data length > 0
-
-── Last error traceback ────────────────────────────────────────────────────────
-    runDEMModel("0108", gageFlux_0108)
-    setNames(split(network2, seq(nrow(network2))), rownames(network2))
-    split(network2, seq(nrow(network2)))
-    split.default(network2, seq(nrow(network2)))
-    .handleSimpleError(function (condition)  {     state$error <- build_mess...
-    h(simpleError(msg, call))
-Execution halted

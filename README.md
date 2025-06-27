@@ -6,5 +6,3 @@
 remotes::install_github("rspatial/terra",  repos='https://rspatial.r-universe.dev')
 remotes::install_github("KennethTM/flowdem")
 ```
-
-## To dos
