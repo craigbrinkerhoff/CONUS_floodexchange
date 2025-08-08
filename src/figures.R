@@ -1,6 +1,6 @@
 ## Figures functions
 ## Craig Brinkerhoff
-## Winter 2024
+## Summer 2025
 
 
 
@@ -139,26 +139,26 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V){
             plot.tag = element_text(size=24,
                                     face='bold'))
 
-    #combine (using full join for twice repated so when brought together ~4 predictions at each site)
+    #combine
     full_predictions <- full_predictions_Q %>%
-        dplyr::full_join(full_predictions_V, by='.row') %>%
-        dplyr::mutate(tau_dy = 10^(V_m3 / Qexc_m3dy),
-                    log10tau_dy.pred = (.pred.y / .pred.x)) %>%
-        dplyr::mutate(transform_bias =  mean(10^(log10(tau_dy)-log10tau_dy.pred), na.rm=T)) %>% #eq 9.24 from https://pubs.usgs.gov/tm/04/a03/tm4a3.pdf (also see https://nrtwq.usgs.gov/co/methods/)
-        dplyr::mutate(tau_dy.pred = 10^(log10tau_dy.pred) * transform_bias) %>%
+        dplyr::left_join(full_predictions_V, by='.row') %>%
+        dplyr::mutate(log10tau_hr = (V_m3 - Qexc_m3dy) + log10(24),
+                    log10tau_hr.pred = (.pred.y - .pred.x) + log10(24)) %>%
         tidyr::drop_na()
 
-    r2 <- round(summary(lm(tau_dy.pred~tau_dy, data=full_predictions))$r.squared,2)
+    r2 <- round(summary(lm(log10tau_hr.pred~log10tau_hr, data=full_predictions))$r.squared,2)
 
-    scatter_tau <- ggplot(full_predictions, aes(x=(tau_dy), y=(tau_dy.pred))) + #natural space so we can use scale_log10
+    scatter_tau <- ggplot(full_predictions, aes(x=10^(log10tau_hr), y=10^(log10tau_hr.pred))) + #natural space so we can use scale_log10
         geom_abline(linetype='dashed', color='darkgrey', linewidth=1.75) +
         geom_point(pch=21, size=8, color='black', fill='#3a5a40') +
         geom_smooth(method='lm', se=F, linewidth=2, color='black')+
-        coord_cartesian(xlim=c(1,30), ylim=c(1,30))+
-        annotate("text", x = 7.5, y = 30, label = bquote(bold(n:~.(nrow(full_predictions))~'gages')), size=8, color='#3a5a40')+
-        annotate("text", x = 7.5, y = 28.5, label = bquote(bold(r^2*':'~.(r2))), size=8, color='#3a5a40')+
-        xlab(bquote(bold('Observed'~tau[flood]~'[dys]')))+
-        ylab(bquote(bold('Modeled'~tau[flood]~'[dys]')))+
+       # coord_cartesian(xlim=c(1,20), ylim=c(1,20))+
+        annotate("text", x = 10^-2, y = 10^4, label = bquote(bold(n:~.(nrow(full_predictions))~'gages')), size=8, color='#3a5a40')+ #7.5 30
+        annotate("text", x = 10^-2, y = 10^3.5, label = bquote(bold(r^2*':'~.(r2))), size=8, color='#3a5a40')+ #7.5 28.5
+        scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e-4, 1e4))+
+        scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e-4, 1e4))+
+        xlab(bquote(bold('Observed'~tau[flood]~'[hr]')))+
+        ylab(bquote(bold('Modeled'~tau[flood]~'[hr]')))+
         theme(axis.title=element_text(face='bold', size=18),
             axis.text = element_text(size=15),
             panel.border = element_rect(colour = "black", fill = NA),
@@ -171,9 +171,9 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V){
 
     comboPlot <- patchwork::wrap_plots(A=scatter_Q, B=scatter_V, C=scatter_tau, design=layout)
 
-    ggsave('cache/validationML.png', comboPlot, width=20, height=9)
+    ggsave('cache/validationML.png', comboPlot, width=20, height=8)
 
-    return('cache/validationML.png')
+    return(full_predictions)
 }
 
 
@@ -249,7 +249,8 @@ makeGageMap <- function(gage_df) {
         sf::st_transform(crs=sf::st_crs(4326))
 
     #build gage shapefile
-    gage_shp <- sf::st_as_sf(gage_df, coords=c('lon', 'lat'), crs='epsg:4326')
+    gage_shp <- gage_df %>%
+        sf::st_as_sf(coords=c('lon', 'lat'), crs='epsg:4326')
 
     map <- ggplot(gage_shp) +
         geom_sf(data=states,

@@ -1,3 +1,3 @@
 library(targets)
 
-tar_make(fig_validationML)
+tar_make()

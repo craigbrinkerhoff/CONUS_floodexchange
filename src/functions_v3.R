@@ -6,6 +6,7 @@ buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
     if(nrow(gageDF)==0){
         return(data.frame())
     }
+
     #dummy dataframe to get rest of function to run
     gageDF <- data.frame(site_no=gageDF$NHDPlusID,
                         id = 'volume_validation',
@@ -80,13 +81,27 @@ buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
 
 
 buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, code) {
+    if(nrow(gageDF %>% dplyr::bind_rows())==0){
+        return(data.frame())
+    }
+
     #prep gages for filtering
     gageDF <- dplyr::bind_rows(gageDF) %>%
         dplyr::filter(Qexc_m3dy > 0) %>% # integration necessitates storms be 2+ days long to calculate a flux
         dplyr::group_by(site_no) %>%
         dplyr::summarise(id = code,
-                        Htf_m = mean(Htf_m, na.rm=T),
-                        Qexc_m3dy = mean(Qexc_m3dy, na.rm=T))
+                        meanHtf_m = mean(Htf_m, na.rm=T),
+                        meanQexc_m3dy = mean(Qexc_m3dy, na.rm=T),
+                        perc50Htf_m = median(Htf_m, na.rm=T),
+                        perc50Qexc_m3dy = median(Qexc_m3dy, na.rm=T),
+                        perc2_Htf_m = quantile(Htf_m, c(0.98), na.rm=T),
+                        perc2_Qexc_m3dy = quantile(Qexc_m3dy, c(0.98), na.rm=T),
+                        perc98_Htf_m = quantile(Htf_m, c(0.02), na.rm=T),
+                        perc98_Qexc_m3dy = quantile(Qexc_m3dy, c(0.02), na.rm=T),
+                        perc10_Htf_m = quantile(Htf_m, c(0.90), na.rm=T),
+                        perc10_Qexc_m3dy = quantile(Qexc_m3dy, c(0.90), na.rm=T),
+                        perc90_Htf_m = quantile(Htf_m, c(0.10), na.rm=T),
+                        perc90_Qexc_m3dy = quantile(Qexc_m3dy, c(0.10), na.rm=T))
 
     huc2 <- substr(huc4, 1, 2)
 
@@ -352,7 +367,7 @@ addOtherNHDFeatures <- function(network, huc4id){
     
     network <- network %>%
         dplyr::filter(waterbody_type == 'river') %>%
-        dplyr::select(c('NHDPlusID', 'GageID', 'StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope', 'Wb_m', 'Qb_cms', 'Qexc_m3dy', 'V_m3')) %>%
+        dplyr::select(c('NHDPlusID', 'GageID', 'StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope', 'Qexc_m3dy', 'V_m3')) %>% #'Wb_m', 'Qb_cms',
         dplyr::left_join(flow_df, by='NHDPlusID') %>%
         dplyr::left_join(precip_01, by='NHDPlusID') %>%
         dplyr::left_join(precip_02, by='NHDPlusID') %>%
@@ -442,10 +457,10 @@ trainModelEval_V <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
 
     data_fin <- gageForModel_combined %>%
         dplyr::mutate(V_m3 = log10(V_m3)) %>%
-        dplyr::select(!Qexc_m3dy) %>%
+        dplyr::select(!Qexc_m3dy) %>% #to match the Q model
         dplyr::select(!NHDPlusID) %>% #just to be sure
-        dplyr::select(!GageID) %>% #just to be sure
-        tidyr::drop_na(V_m3)
+        dplyr::select(!GageID) #%>% #just to be sure
+      #  tidyr::drop_na(V_m3)
 
     #retune using same nested resampling procedure, but hold the model specifiction constant
     set.seed(76)
@@ -513,8 +528,8 @@ trainModelFin_V <- function(gageForModel_combined, nInnerFolds, numGrid){
         dplyr::mutate(V_m3 = log10(V_m3)) %>%
         dplyr::select(!Qexc_m3dy) %>%
         dplyr::select(!NHDPlusID) %>% #just to be sure
-        dplyr::select(!GageID) %>% #just to be sure
-        tidyr::drop_na(V_m3)
+        dplyr::select(!GageID)# %>% #just to be sure
+      #  tidyr::drop_na(V_m3)
 
     #retune using same nested resampling procedure, but hold the model specifiction constant
     set.seed(76)
@@ -569,10 +584,10 @@ trainModelEval_Q <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
 
     data_fin <- gageForModel_combined %>%
         dplyr::mutate(Qexc_m3dy = log10(Qexc_m3dy)) %>%
-        dplyr::select(!V_m3) %>%
+        dplyr::select(!V_m3) %>% #to match the V model
         dplyr::select(!NHDPlusID) %>% #just to be sure
-        dplyr::select(!GageID) %>% #just to be sure
-        tidyr::drop_na(Qexc_m3dy)
+        dplyr::select(!GageID) #%>% #just to be sure
+       # tidyr::drop_na(Qexc_m3dy)
 
     #retune using same nested resampling procedure, but hold the model specifiction constant
     set.seed(76)
@@ -640,8 +655,8 @@ trainModelFin_Q <- function(gageForModel_combined, nInnerFolds, numGrid){
         dplyr::mutate(Qexc_m3dy = log10(Qexc_m3dy)) %>%
         dplyr::select(!V_m3) %>%
         dplyr::select(!NHDPlusID) %>% #just to be sure
-        dplyr::select(!GageID) %>% #just to be sure
-        tidyr::drop_na(Qexc_m3dy)
+        dplyr::select(!GageID) #%>% #just to be sure
+        #tidyr::drop_na(Qexc_m3dy)
 
     #retune using same nested resampling procedure, but hold the model specifiction constant
     set.seed(76)
@@ -839,12 +854,6 @@ wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
 
 
 
-getBasinGagesVal <- function(BHGmodel_jacknife){
-
-    gages <- BHGmodel_jacknife$GageID
-    gages <- gages[gages != 'ungaged']
-    return(gages)
-}
 
 
 # combineTau <- function(gageTau){
@@ -940,8 +949,11 @@ modelsJacknifeBHG <- function(){
 
 
 prepBankfullHydraulics <- function(mode, gageRecord, gage, BHGmodel_jacknife, BHGmodel, minAHGr2, gageRecordStart, gageRecordEnd){
+    if(nrow(gage %>% dplyr::bind_rows())==0){return(data.frame())}
+    if(nrow(gageRecord %>% dplyr::bind_rows())==0){return(data.frame())}
+
     gageRecord <- dplyr::bind_rows(gageRecord) %>%
-        dplyr::select(c('site_no', 'fema100yrflood_cms', 'Q_cms', 'exceed_prob')) #date_hr
+        dplyr::select(c('site_no', 'Q_cms', 'exceed_prob')) #date_hr fema100yrflood_cms
 
     #filter for flows above bankfull, to calculate exceedance probabilities for flood events (aside from the max-annual AEP used to validate against FEMA)
     gage <- sf::st_drop_geometry(gage) %>% 
@@ -1175,6 +1187,10 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG){
 
 
 prepGage <- function(gageID){
+    if(is.na(gageID)){
+        return(data.frame())
+    }
+
     site <- dataRetrieval::readNWISsite(siteNumbers = gageID) %>%
         dplyr::mutate(lat = dec_lat_va,
                     lon = dec_long_va,
@@ -1205,85 +1221,91 @@ prepGage <- function(gageID){
 
 
 prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength){
-  #prep
-  gageID <- gage$site_no
-  
-  #grab sub-daily discharge data
-  gagedata <- tryCatch(dataRetrieval::readNWISdata(sites = gageID,
-                                          service='dv',
-                                          parameterCd = '00060', #discharge parameter code [cfs]
-                                          startDate = gageRecordStart,
-                                          endDate = gageRecordEnd),
-                      error = function(m){return(data.frame())})
+    set.seed(435)
 
-  if(nrow(gagedata)==0) {return(data.frame())} #if no gage data, move on
-  if(!("X_00060_00003" %in% colnames(gagedata))){return(data.frame())} #if incorrect discharge column name (happens sometimes), move on
+    if(nrow(gage)==0){
+        return(data.frame())
+    }
 
-  #convert to metric
-  gagedata$Q_cms <- gagedata$X_00060_00003 * 0.0283 #cfs to cms
-  
-  #only keep flowing events
-  gagedata <- gagedata %>%
-    dplyr::filter(Q_cms > 0)
+    #prep
+    gageID <- gage$site_no
 
-  # convert to date (workaround to handle known date class bug with midnight- https://github.com/tidyverse/lubridate/issues/1124)
-  gagedata$date <- lubridate::ymd_hms(format(as.POSIXct(gagedata$dateTime), format = "%Y-%m-%d %T %Z"))
+    #grab sub-daily discharge data
+    gagedata <- tryCatch(dataRetrieval::readNWISdata(sites = gageID,
+                                            service='dv',
+                                            parameterCd = '00060', #discharge parameter code [cfs]
+                                            startDate = gageRecordStart,
+                                            endDate = gageRecordEnd),
+                        error = function(m){return(data.frame())})
 
-  # gagedata_og <- gagedata
+    if(nrow(gagedata)==0) {return(data.frame())} #if no gage data, move on
+    if(!("X_00060_00003" %in% colnames(gagedata))){return(data.frame())} #if incorrect discharge column name (happens sometimes), move on
 
-  #downsample to hourly (just to be consistent and reduce volume of data)
-  # gagedata <- gagedata_og %>%
-  #   dplyr::mutate(date_hr = lubridate::ymd_h(paste0(lubridate::year(date), '-', lubridate::month(date),'-',lubridate::day(date), '-', lubridate::hour(date)))) %>%
-  #   dplyr::group_by(date_hr) %>%
-  #   dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
-  #                   Q_cms = mean(Q_cms, na.rm=T))
+    #convert to metric
+    gagedata$Q_cms <- gagedata$X_00060_00003 * 0.0283 #cfs to cms
 
-  #get max annual floods for calculating the FEMA 100yr AEP
-  gagedata_aep <- gagedata %>%
-    dplyr::mutate(year = lubridate::year(date)) %>%
-    dplyr::group_by(year) %>%
-    dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
-                  Q_cms = max(Q_cms, na.rm=T))
+    #only keep flowing events
+    gagedata <- gagedata %>%
+        dplyr::filter(Q_cms > 0)
 
-  gagedata_aep$rank <- rank(-gagedata_aep$Q_cms) #annual flood data
-  gagedata_aep$exceed_prob <- (gagedata_aep$rank/(nrow(gagedata_aep) + 1))
+    # convert to date (workaround to handle known date class bug with midnight- https://github.com/tidyverse/lubridate/issues/1124)
+    gagedata$date <- lubridate::ymd_hms(format(as.POSIXct(gagedata$dateTime), format = "%Y-%m-%d %T %Z"))
 
-  #get number of years on recordf
-  start <- min(gagedata_aep$year)
-  end <- max(gagedata_aep$year)
-  spread <- end - start
+    # gagedata_og <- gagedata
 
-  if(spread < minRecordLength){return(data.frame())}
-  if(nrow(gagedata)== 0){return(data.frame())}
-  
-  gagedata$spread <- spread
+    #downsample to hourly (just to be consistent and reduce volume of data)
+    # gagedata <- gagedata_og %>%
+    #   dplyr::mutate(date_hr = lubridate::ymd_h(paste0(lubridate::year(date), '-', lubridate::month(date),'-',lubridate::day(date), '-', lubridate::hour(date)))) %>%
+    #   dplyr::group_by(date_hr) %>%
+    #   dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
+    #                   Q_cms = mean(Q_cms, na.rm=T))
+
+    #get max annual floods for calculating the FEMA 100yr AEP
+    gagedata_aep <- gagedata %>%
+        dplyr::mutate(year = lubridate::year(date)) %>%
+        dplyr::group_by(year) %>%
+        dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
+                    Q_cms = max(Q_cms, na.rm=T))
+
+    gagedata_aep$rank <- rank(-gagedata_aep$Q_cms) #annual flood data
+    gagedata_aep$exceed_prob <- (gagedata_aep$rank/(nrow(gagedata_aep) + 1))
+
+    #get number of years on recordf
+    start <- min(gagedata_aep$year)
+    end <- max(gagedata_aep$year)
+    spread <- end - start
+
+    if(spread < minRecordLength){return(data.frame())}
+    if(nrow(gagedata)== 0){return(data.frame())}
+
+    gagedata$spread <- spread
 
 
-  #get exceedance probs for each flow value
-  gagedata$rank <- rank(-gagedata$Q_cms) #hourly flow data
-  gagedata$exceed_prob <- (gagedata$rank/(nrow(gagedata) + 1)) #exceed prob for a given hour over 'spread' years
+    #get exceedance probs for each flow value
+    gagedata$rank <- rank(-gagedata$Q_cms) #hourly flow data
+    gagedata$exceed_prob <- (gagedata$rank/(nrow(gagedata) + 1)) #exceed prob for a given hour over 'spread' years
 
-  #grab rating table to convert to stage
-  #source('src/utils.R')
-  ratingTable <- tryCatch(dataRetrieval::readNWISrating(gageID, type='exsa'), #readNWISrating_CRAIG
-                      error = function(m){return(data.frame())})
-  ratingTable$stage_m <- (ratingTable$INDEP  + ratingTable$SHIFT) * 0.3048 #ft to m
-  ratingTable$Q_cms <- ratingTable$DEP * 0.0283
+    #grab rating table to convert to stage
+    #source('src/utils.R')
+    ratingTable <- tryCatch(dataRetrieval::readNWISrating(gageID, type='exsa'), #readNWISrating_CRAIG
+                        error = function(m){return(data.frame())})
+    ratingTable$stage_m <- (ratingTable$INDEP  + ratingTable$SHIFT) * 0.3048 #ft to m
+    ratingTable$Q_cms <- ratingTable$DEP * 0.0283
 
-  #convert historical streamflow record to stages using rating table
-  gagedata$stage_m <- sapply(gagedata$Q_cms, function(i){ratingTable[which.min(abs(ratingTable$Q_cms - i)),]$stage_m})
+    #convert historical streamflow record to stages using rating table
+    gagedata$stage_m <- sapply(gagedata$Q_cms, function(i){ratingTable[which.min(abs(ratingTable$Q_cms - i)),]$stage_m})
 
-  if(is.list(gagedata$stage_m)){return(data.frame())} #sometimes you get an empty list b/c the rating table is empty
+    if(is.list(gagedata$stage_m)){return(data.frame())} #sometimes you get an empty list b/c the rating table is empty
 
-  #add flag if gagedata is outside of the rating table
-  gagedata$ratingflag <- ifelse(gagedata$Q_cms > max(ratingTable$Q_cms) | gagedata$Q_cms < min(ratingTable$Q_cms), 1, 0)
+    #add flag if gagedata is outside of the rating table
+    gagedata$ratingflag <- ifelse(gagedata$Q_cms > max(ratingTable$Q_cms) | gagedata$Q_cms < min(ratingTable$Q_cms), 1, 0)
 
-  #add fema 100 yr aep
-  fema100yrflood_cms <- gagedata_aep[which.min(abs(gagedata_aep$exceed_prob - 0.01)),]$Q_cms
+    # #add fema 100 yr aep
+    # fema100yrflood_cms <- gagedata_aep[which.min(abs(gagedata_aep$exceed_prob - 0.01)),]$Q_cms
 
-  gagedata$fema100yrflood_cms <- fema100yrflood_cms
+    # gagedata$fema100yrflood_cms <- fema100yrflood_cms
 
-  return(gagedata)
+    return(gagedata)
 }
 
 
@@ -1422,59 +1444,60 @@ modelInundation <- function(inundationData, floodDepth){
 
 
 buildDepthAHG <- function(gage, minADCPMeas){
-  if(nrow(gage)==0){return(data.frame())}
-  #prep
-  gageID <- gage$site_no
+    if(nrow(gage)==0){return(data.frame())}
 
-  #prep custom rating table from available adcp measurements
-  surfaceData <- tryCatch(dataRetrieval::readNWISmeas(gageID, expanded = TRUE),
-                    error=function(m){return(data.frame('site_no'=gageID,
-                                                      'lm_r2'=NA,
-                                                      'lm_depth_a'=NA,
-                                                      'lm_depth_b'=NA))})
-  
-  if(nrow(surfaceData)< minADCPMeas){return(data.frame('site_no'=gageID,
-                                                      'lm_r2'=NA,
-                                                      'lm_depth_a'=NA,
-                                                      'lm_depth_b'=NA))}
-  surfaceData <- surfaceData %>%
-    dplyr::filter(measured_rating_diff %in% c('Fair','Good', 'Excellent')) %>% #Fair are < 8% flow diff, Good are < 5% flow diff, and Excellent are <2% flow diff
-    dplyr::mutate('Q_cms'=chan_discharge* 0.0283,
-                  'width_m'=chan_width*0.3048,
-                  'area_m2'=chan_area*0.092903,
-                  'velocity_ms'=chan_velocity*0.3048) %>%
-    dplyr::select(c('site_no', 'Q_cms', 'width_m', 'area_m2', 'velocity_ms')) %>%
-    dplyr::mutate(depth_m=area_m2 / width_m) %>%
-    dplyr::filter(depth_m > 0 & Q_cms > 0 & is.finite(depth_m) & is.finite(Q_cms))
+    #prep
+    gageID <- gage$site_no
 
-  #remove likely erronous outlier depth measurements
-  iqr <- IQR(surfaceData$depth_m, na.rm=T)
-  
-  surfaceData <- surfaceData %>%
-    dplyr::filter(depth_m < (quantile(depth_m, 0.75, na.rm=T) + 1.5*iqr)) %>%
-    dplyr::filter(depth_m > (quantile(depth_m, 0.25, na.rm=T) - 1.5*iqr))
-  
-  if(nrow(surfaceData)< minADCPMeas){return(data.frame('site_no'=gageID,
-                                                      'lm_r2'=NA,
-                                                      'lm_depth_a'=NA,
-                                                      'lm_depth_b'=NA))}
-  
-  #get bankfull depth
-  lm_depth <- lm(log10(depth_m)~log10(Q_cms), data=surfaceData)
-  lm_depth_a <- coef(lm_depth)[1]
-  lm_depth_b <- coef(lm_depth)[2]
-  lm_depth_bias <- mean(10^(lm_depth$residuals), na.rm=T)
-  
-  #setup site info for later export
-  site_info <- data.frame('site_no'=gageID,
-                          'lm_r2'=summary(lm_depth)$r.squared,
-                          'lm_depth_a'=lm_depth_a,
-                          'lm_depth_b'=lm_depth_b,
-                          'lm_depth_bias_correct'=lm_depth_bias)
+    #prep custom rating table from available adcp measurements
+    surfaceData <- tryCatch(dataRetrieval::readNWISmeas(gageID, expanded = TRUE),
+                                    error=function(m){return(data.frame('site_no'=gageID,
+                                                        'lm_r2'=NA,
+                                                        'lm_depth_a'=NA,
+                                                        'lm_depth_b'=NA))})
 
-  rownames(site_info) <- NULL
-  
-  return(site_info)
+    if(nrow(surfaceData)< minADCPMeas){return(data.frame('site_no'=gageID,
+                                                        'lm_r2'=NA,
+                                                        'lm_depth_a'=NA,
+                                                        'lm_depth_b'=NA))}
+    surfaceData <- surfaceData %>%
+        dplyr::filter(measured_rating_diff %in% c('Fair','Good', 'Excellent')) %>% #Fair are < 8% flow diff, Good are < 5% flow diff, and Excellent are <2% flow diff
+        dplyr::mutate('Q_cms'=chan_discharge* 0.0283,
+                    'width_m'=chan_width*0.3048,
+                    'area_m2'=chan_area*0.092903,
+                    'velocity_ms'=chan_velocity*0.3048) %>%
+        dplyr::select(c('site_no', 'Q_cms', 'width_m', 'area_m2', 'velocity_ms')) %>%
+        dplyr::mutate(depth_m=area_m2 / width_m) %>%
+        dplyr::filter(depth_m > 0 & Q_cms > 0 & is.finite(depth_m) & is.finite(Q_cms))
+
+    #remove likely erronous outlier depth measurements
+    iqr <- IQR(surfaceData$depth_m, na.rm=T)
+
+    surfaceData <- surfaceData %>%
+        dplyr::filter(depth_m < (quantile(depth_m, 0.75, na.rm=T) + 1.5*iqr)) %>%
+        dplyr::filter(depth_m > (quantile(depth_m, 0.25, na.rm=T) - 1.5*iqr))
+
+    if(nrow(surfaceData)< minADCPMeas){return(data.frame('site_no'=gageID,
+                                                        'lm_r2'=NA,
+                                                        'lm_depth_a'=NA,
+                                                        'lm_depth_b'=NA))}
+
+    #get bankfull depth
+    lm_depth <- lm(log10(depth_m)~log10(Q_cms), data=surfaceData)
+    lm_depth_a <- coef(lm_depth)[1]
+    lm_depth_b <- coef(lm_depth)[2]
+    lm_depth_bias <- mean(10^(lm_depth$residuals), na.rm=T)
+
+    #setup site info for later export
+    site_info <- data.frame('site_no'=gageID,
+                            'lm_r2'=summary(lm_depth)$r.squared,
+                            'lm_depth_a'=lm_depth_a,
+                            'lm_depth_b'=lm_depth_b,
+                            'lm_depth_bias_correct'=lm_depth_bias)
+
+    rownames(site_info) <- NULL
+
+    return(site_info)
 }
 
 

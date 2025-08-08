@@ -4,9 +4,39 @@
 
 
 
+selectDepthandQ <- function(gageFlux){
+  gageFlux$Htf_m <- gageFlux$meanHtf_m
+  gageFlux$Qexc_m3dy <- gageFlux$meanQexc_m3dy
+
+  return(gageFlux)
+}
+
+
+
+
+cleanUpDF <- function(df){
+  out <- df %>%
+    tidyr::drop_na(V_m3) %>%
+    tidyr::drop_na(Qexc_m3dy)
+
+  return(out)
+}
+
+
+cleanUpGages <- function(gages_df_combined, modelDF){
+  out <- gages_df_combined %>%
+    dplyr::inner_join(modelDF, by=c('site_no'='GageID')) %>%
+    dplyr::distinct() # a few duplicate rows, presumbaly from spatial joining of physio upstream. Not a problem in the modelDF
+
+  return(out)
+}
+
+
 
 
 getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd){
+  set.seed(435)
+
   huc2 <- substr(huc4id, 1, 2)
   huc8s <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU8.shp')) %>%
     dplyr::filter(substr(huc8, 1, 4)==huc4id)
@@ -32,8 +62,24 @@ getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd){
     gages_fin <- rbind(gages_fin, gages)
   }
 
+  if(nrow(gages_fin)==0){
+    return(NA)
+  }
+
   return(gages_fin$site_no)
 }
+
+
+
+
+
+getBasinGagesVal <- function(BHGmodel_jacknife){
+
+    gages <- BHGmodel_jacknife$GageID
+    gages <- gages[gages != 'ungaged']
+    return(gages)
+}
+
 
 
 
@@ -188,6 +234,7 @@ readNWISrating_CRAIG <- function(siteNumber, type='base', convertType = TRUE) {
 
 
 makeGageDF <- function(gage, model_gages, huc4){
+  if(nrow(gage %>% dplyr::bind_rows())==0) {return(data.frame())}
   out <- gage %>%
     dplyr::bind_rows() %>%
     dplyr::filter(site_no %in% model_gages$GageID) %>%
