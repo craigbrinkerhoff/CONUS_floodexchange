@@ -1,3 +1,3 @@
 library(targets)
 
-tar_make()
+tar_make(fig_map)

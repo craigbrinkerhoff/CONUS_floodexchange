@@ -80,7 +80,7 @@ buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
 
 
 
-buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, code) {
+buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF) {
     if(nrow(gageDF %>% dplyr::bind_rows())==0){
         return(data.frame())
     }
@@ -88,20 +88,20 @@ buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, code) {
     #prep gages for filtering
     gageDF <- dplyr::bind_rows(gageDF) %>%
         dplyr::filter(Qexc_m3dy > 0) %>% # integration necessitates storms be 2+ days long to calculate a flux
-        dplyr::group_by(site_no) %>%
-        dplyr::summarise(id = code,
-                        meanHtf_m = mean(Htf_m, na.rm=T),
-                        meanQexc_m3dy = mean(Qexc_m3dy, na.rm=T),
-                        perc50Htf_m = median(Htf_m, na.rm=T),
-                        perc50Qexc_m3dy = median(Qexc_m3dy, na.rm=T),
-                        perc2_Htf_m = quantile(Htf_m, c(0.98), na.rm=T),
-                        perc2_Qexc_m3dy = quantile(Qexc_m3dy, c(0.98), na.rm=T),
-                        perc98_Htf_m = quantile(Htf_m, c(0.02), na.rm=T),
-                        perc98_Qexc_m3dy = quantile(Qexc_m3dy, c(0.02), na.rm=T),
-                        perc10_Htf_m = quantile(Htf_m, c(0.90), na.rm=T),
-                        perc10_Qexc_m3dy = quantile(Qexc_m3dy, c(0.90), na.rm=T),
-                        perc90_Htf_m = quantile(Htf_m, c(0.10), na.rm=T),
-                        perc90_Qexc_m3dy = quantile(Qexc_m3dy, c(0.10), na.rm=T))
+        dplyr::mutate(month = lubridate::month(date)) %>%
+        dplyr::group_by(site_no, month) %>%
+        dplyr::summarise(Htf_m = mean(Htf_m, na.rm=T),
+                        Qexc_m3dy = mean(Qexc_m3dy, na.rm=T))
+                        # perc50Htf_m = median(Htf_m, na.rm=T),
+                        # perc50Qexc_m3dy = median(Qexc_m3dy, na.rm=T),
+                        # perc2_Htf_m = quantile(Htf_m, c(0.98), na.rm=T),
+                        # perc2_Qexc_m3dy = quantile(Qexc_m3dy, c(0.98), na.rm=T),
+                        # perc98_Htf_m = quantile(Htf_m, c(0.02), na.rm=T),
+                        # perc98_Qexc_m3dy = quantile(Qexc_m3dy, c(0.02), na.rm=T),
+                        # perc10_Htf_m = quantile(Htf_m, c(0.90), na.rm=T),
+                        # perc10_Qexc_m3dy = quantile(Qexc_m3dy, c(0.90), na.rm=T),
+                        # perc90_Htf_m = quantile(Htf_m, c(0.10), na.rm=T),
+                        # perc90_Qexc_m3dy = quantile(Qexc_m3dy, c(0.10), na.rm=T))
 
     huc2 <- substr(huc4, 1, 2)
 
@@ -175,6 +175,7 @@ buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, code) {
 
     return(network)
 }
+
 
 
 
@@ -367,7 +368,7 @@ addOtherNHDFeatures <- function(network, huc4id){
     
     network <- network %>%
         dplyr::filter(waterbody_type == 'river') %>%
-        dplyr::select(c('NHDPlusID', 'GageID', 'StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope', 'Qexc_m3dy', 'V_m3')) %>% #'Wb_m', 'Qb_cms',
+        dplyr::select(c('NHDPlusID', 'GageID', 'month', 'StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope', 'Qexc_m3dy', 'V_m3')) %>%
         dplyr::left_join(flow_df, by='NHDPlusID') %>%
         dplyr::left_join(precip_01, by='NHDPlusID') %>%
         dplyr::left_join(precip_02, by='NHDPlusID') %>%
@@ -397,6 +398,207 @@ addOtherNHDFeatures <- function(network, huc4id){
     
     return(network)
 }
+
+
+
+
+buildCONUSnetwork <- function(huc4, BHGmodel){
+    huc2 <- substr(huc4,1,2)
+
+    network_VAA <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'), layer='NHDPlusFlowlineVAA', quiet=TRUE)
+    network_gages <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'), layer='NHDPlusEROMQAMA', quiet=TRUE)
+    network <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),layer = 'NHDFlowline',quiet = TRUE) %>%
+        sf::st_zm() %>%
+        dplyr::left_join(network_VAA, by='NHDPlusID') %>%
+        dplyr::select(c('NHDPlusID', 'WBArea_Permanent_Identifier', 'StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope', 'Shape'))
+    
+    network <- fixGeometries(network)
+
+    #clip to CONUS land boundary (remove international streams and coastal estuaries like Long Island Sound and Chesapeake Bay)
+    # CONUS boundary
+    states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
+    states <- dplyr::filter(states, !(NAME %in% c('Alaska',
+                                                'American Samoa',
+                                                'Commonwealth of the Northern Mariana Islands',
+                                                'Guam',
+                                                'District of Columbia',
+                                                'Puerto Rico',
+                                                'United States Virgin Islands',
+                                                'Hawaii'))) #remove non CONUS states/territories
+
+    states <- sf::st_union(states) %>%
+        sf::st_transform(crs=sf::st_crs(network))
+    
+    network <- network %>%
+        sf::st_intersection(states)
+
+    #add reach type
+    waterbodies <-  sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
+                            layer = 'NHDWaterbody',
+                            quiet = TRUE) %>%
+        sf::st_drop_geometry() %>%
+        dplyr::select(c('Permanent_Identifier', 'FType', 'AreaSqKm'))
+        colnames(waterbodies) <- c('Permanent_Identifier', 'FType', 'WBAreaSqKm')
+
+    network <- network %>%
+        dplyr::left_join(waterbodies, by=c('WBArea_Permanent_Identifier'='Permanent_Identifier')) %>%
+        dplyr::mutate(waterbody_type = ifelse(FType %in% c('436', '390') & WBAreaSqKm > 0, 'lake/reservoir', 'river')) %>% #to be a waterbody, must have an area > 0
+        dplyr::relocate(WBArea_Permanent_Identifier, .after=waterbody_type) %>%
+        dplyr::relocate(WBAreaSqKm, .after=WBArea_Permanent_Identifier) %>%
+        dplyr::select(!FType)
+
+    #remove impossible flowlines with no drainage area or divergent starting reaches (streamalc == 0; see pg. 45 at https://pubs.usgs.gov/of/2019/1096/ofr20191096.pdf)
+    network <- network %>%
+        dplyr::filter(AreaSqKm > 0 & TotDASqKm > 0 & StreamCalc > 0)  
+
+    huc4id <- huc4
+    basin <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU4.shp')) %>%
+        dplyr::filter(huc4 == huc4id)
+    basin <- fixGeometries(basin)
+
+    #setup bankfull geometry
+    sf::sf_use_s2(FALSE)
+    regions <- sf::st_read('data/physio.shp') #physiographic regions
+    regions <- fixGeometries(regions)
+    shp_temp <- sf::st_join(basin, regions, largest=TRUE) #take the physiographic region that the basin is mostly in (dominant spatial intersection)
+
+    physio_region <- shp_temp$DIVISION
+
+    #add bankfull hydraulics
+    network$a_Wb <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$a_Wb)})
+    network$b_Wb <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$b_Wb)})
+    network$mean_residual_Wb <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$mean_residual_Wb)})
+    network$Wb_m <- 10^(network$a_Wb + network$b_Wb*log10(network$TotDASqKm)) * network$mean_residual_Wb #see other notes on bias correction
+
+    network$a_Qb <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$a_Qb)})
+    network$b_Qb <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$b_Qb)})
+    network$mean_residual_Qb <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$mean_residual_Qb)})
+    network$Qb_cms <- 10^(network$a_Qb + network$b_Qb*log10(network$TotDASqKm)) * network$mean_residual_Qb #see other notes on bias correction
+
+    network$a_Ab <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$a_Ab)})
+    network$b_Ab <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$b_Ab)})
+    network$mean_residual_Ab <- sapply(physio_region, function(x){return(BHGmodel[BHGmodel$division == x,]$mean_residual_Ab)})
+    network$Ab_m2 <- 10^(network$a_Ab + network$b_Ab*log10(network$TotDASqKm)) * network$mean_residual_Ab #see other notes on bias correction
+
+    network$Hb_m <- network$Ab_m2 / network$Wb_m
+
+    # filter for rivers with bankfull width > 10m (matching exactly our model)
+    network <- network %>%
+        dplyr::filter(AreaSqKm > 0 & Wb_m > 10) %>%
+        dplyr::mutate(huc4=huc4)
+
+    flow_df <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusEROMMA', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'QBMA')) #naturalized flow
+
+    precip_01 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM01', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'PrecipMM01'))
+
+    precip_02 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM02', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'PrecipMM02'))
+    
+    precip_03 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM03', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'PrecipMM03'))
+    
+    precip_04 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM04', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'PrecipMM04'))
+    
+    precip_05 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM05', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'PrecipMM05'))
+    
+    precip_06 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM06', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'PrecipMM06'))
+    
+    precip_07 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM07', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'PrecipMM07'))
+    
+    precip_08 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM08', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'PrecipMM08'))
+    
+    precip_09 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM09', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'PrecipMM09'))
+    
+    precip_10 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM10', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'PrecipMM10'))
+    
+    precip_11 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM11', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'PrecipMM11'))
+    
+    precip_12 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM12', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'PrecipMM12'))
+
+    temp_01 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM01', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'TempMM01'))
+
+    temp_02 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM02', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'TempMM02'))
+    
+    temp_03 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM03', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'TempMM03'))
+    
+    temp_04 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM04', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'TempMM04'))
+    
+    temp_05 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM05', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'TempMM05'))
+    
+    temp_06 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM06', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'TempMM06'))
+    
+    temp_07 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM07', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'TempMM07'))
+    
+    temp_08 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM08', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'TempVMM08'))
+    
+    temp_09 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM09', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'TempMM09'))
+    
+    temp_10 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM10', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'TempMM10'))
+
+    temp_11 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM11', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'TempMM11'))
+    
+    temp_12 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM12', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'TempMM12'))
+    
+    #duplicate 12 times and add month vairable
+    network <- purrr::map(seq_len(12),~network) %>% 
+        dplyr::bind_rows(.id="month")
+
+    network <- network %>%
+        dplyr::filter(waterbody_type == 'river') %>%
+        dplyr::select(c('huc4', 'NHDPlusID', 'Wb_m','Hb_m', 'Qb_cms', 'month', 'StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope')) %>%
+        dplyr::left_join(flow_df, by='NHDPlusID') %>%
+        dplyr::left_join(precip_01, by='NHDPlusID') %>%
+        dplyr::left_join(precip_02, by='NHDPlusID') %>%
+        dplyr::left_join(precip_03, by='NHDPlusID') %>%
+        dplyr::left_join(precip_04, by='NHDPlusID') %>%
+        dplyr::left_join(precip_05, by='NHDPlusID') %>%
+        dplyr::left_join(precip_06, by='NHDPlusID') %>%
+        dplyr::left_join(precip_07, by='NHDPlusID') %>%
+        dplyr::left_join(precip_08, by='NHDPlusID') %>%
+        dplyr::left_join(precip_09, by='NHDPlusID') %>%
+        dplyr::left_join(precip_10, by='NHDPlusID') %>%
+        dplyr::left_join(precip_11, by='NHDPlusID') %>%
+        dplyr::left_join(precip_12, by='NHDPlusID') %>%
+        dplyr::left_join(temp_01, by='NHDPlusID') %>%
+        dplyr::left_join(temp_02, by='NHDPlusID') %>%
+        dplyr::left_join(temp_03, by='NHDPlusID') %>%
+        dplyr::left_join(temp_04, by='NHDPlusID') %>%
+        dplyr::left_join(temp_05, by='NHDPlusID') %>%
+        dplyr::left_join(temp_06, by='NHDPlusID') %>%
+        dplyr::left_join(temp_07, by='NHDPlusID') %>%
+        dplyr::left_join(temp_08, by='NHDPlusID') %>%
+        dplyr::left_join(temp_09, by='NHDPlusID') %>%
+        dplyr::left_join(temp_10, by='NHDPlusID') %>%
+        dplyr::left_join(temp_11, by='NHDPlusID') %>%
+        dplyr::left_join(temp_12, by='NHDPlusID')
+    
+    return(network)
+}
+
+
 
 
 
@@ -661,7 +863,7 @@ trainModelFin_Q <- function(gageForModel_combined, nInnerFolds, numGrid){
     #retune using same nested resampling procedure, but hold the model specifiction constant
     set.seed(76)
 
- #retrain workflow on all data (using 10 fold cv for hyperparameter tuning)
+    #retrain workflow on all data (using 10 fold cv for hyperparameter tuning)
     folds <- vfold_cv(data_fin, repeats=1, v=nInnerFolds)
 
     #recipe
@@ -697,6 +899,42 @@ trainModelFin_Q <- function(gageForModel_combined, nInnerFolds, numGrid){
         fit(data_fin)
 
     return(final_model)
+}
+
+
+
+
+
+deployModel <- function(conusDF, model_Q, model_V, monthID){
+    sf::sf_use_s2(FALSE)
+
+    library(tidymodels)
+
+    forPredict <- conusDF %>%
+        sf::st_drop_geometry() %>%
+        dplyr::mutate(month = as.numeric(month)) %>%
+        dplyr::filter(month == monthID)
+
+    nhdIDs <- forPredict$NHDPlusID
+
+    forPredict <- forPredict %>%
+        dplyr::select(!c('huc4', 'NHDPlusID', 'Wb_m', 'Hb_m', 'Qb_cms',))
+
+    #predict floodplain terms
+    forPredict$log10V_m3 <- predict(model_V, forPredict)$.pred
+    forPredict$log10Qexc_m3dy <- predict(model_Q, forPredict)$.pred
+    forPredict$NHDPlusID <- nhdIDs
+
+    forPredict_fin <- forPredict %>%
+        dplyr::select(c('NHDPlusID', 'log10V_m3', 'log10Qexc_m3dy'))
+
+    conusDF <- conusDF %>%
+        dplyr::left_join(forPredict_fin, by='NHDPlusID') %>%
+        dplyr::mutate(log10tau_hr = (log10V_m3 - log10Qexc_m3dy) + log10(24),
+                    log10tau_channel_hr = log10(Wb_m*Hb_m*LengthKM*1000) - log10(Qb_cms*86400) + log10(24)) %>%
+        dplyr::select(c('huc4', 'NHDPlusID', 'StreamCalc', 'AreaSqKm', 'TotDASqKm', 'log10V_m3', 'log10Qexc_m3dy', 'log10tau_hr', 'log10tau_channel_hr', 'Shape'))
+
+    return(conusDF)
 }
 
 
@@ -1163,7 +1401,8 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG){
                         Wb_m = probs[1,]$Wb_m,
                         dy = dplyr::row_number()) %>%
             dplyr::group_by(flood_id)%>%
-            dplyr::summarise(n_yrs=years,
+            dplyr::summarise(date = dplyr::first(dateTime),
+                            n_yrs=years,
                             Qexc_m3dy = (pracma::trapz(dy, Q_cms*86400) - pracma::trapz(dy, (Ub_ms*Wb_m*Htf_m*86400)))/n(), #event floodplain flux (m3/dy)
                             Htf_m = mean(Htf_m)) #event stage (i.e. crest height) (m))
 

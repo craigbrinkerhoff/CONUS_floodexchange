@@ -130,6 +130,26 @@ modelsBHG <- function(){
 
   models[models$division == "INTERMONTANE PLATEAU",]$division <- "INTERMONTANE PLATEAUS" #make sure names line up
 
+  #we found that the WB_m model for the Interior Highlands, i.e. mountainious region in Arkansas, Missouri, Oklahoma, and Ilinois, had really poor fit (r2: 0.27)
+    #and a crazy high model intercept. Likely due to extremely small sample size. So, we swap that model for the region that is most similar, the Appalachian Highlands.
+  models[models$division == 'INTERIOR HIGHLANDS',]$a_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$a_Wb
+  models[models$division == 'INTERIOR HIGHLANDS',]$b_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$b_Wb
+  models[models$division == 'INTERIOR HIGHLANDS',]$r2_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$r2_Wb
+  models[models$division == 'INTERIOR HIGHLANDS',]$mean_residual_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$mean_residual_Wb
+  models[models$division == 'INTERIOR HIGHLANDS',]$see_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$see_Wb
+
+  models[models$division == 'INTERIOR HIGHLANDS',]$a_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$a_Qb
+  models[models$division == 'INTERIOR HIGHLANDS',]$b_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$b_Qb
+  models[models$division == 'INTERIOR HIGHLANDS',]$r2_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$r2_Qb
+  models[models$division == 'INTERIOR HIGHLANDS',]$mean_residual_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$mean_residual_Qb
+  models[models$division == 'INTERIOR HIGHLANDS',]$see_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$see_Qb
+
+  models[models$division == 'INTERIOR HIGHLANDS',]$a_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$a_Ab
+  models[models$division == 'INTERIOR HIGHLANDS',]$b_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$b_Ab
+  models[models$division == 'INTERIOR HIGHLANDS',]$r2_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$r2_Ab
+  models[models$division == 'INTERIOR HIGHLANDS',]$mean_residual_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$mean_residual_Ab
+  models[models$division == 'INTERIOR HIGHLANDS',]$see_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$see_Ab
+
   return(models)
 }
 

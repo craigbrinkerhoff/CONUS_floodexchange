@@ -21,4 +21,5 @@ dependencies:
   - r-ranger
   - r-lightgbm
   - r-bonsai
+  - r-quarto
 prefix: /home/cbb46/.conda/envs/env-CONUS_connectivity_v2

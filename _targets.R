@@ -1,6 +1,6 @@
 # _targets.R file
 # Craig Brinkerhoff
-# Spring 2025
+# Summer 2025
 # Master pipeline for river-floodplain exchange model
 
 #necessary global packages for pipelining.
@@ -38,7 +38,7 @@ numRepeats <- 1
 #   controller = crew_controller_local(workers = 5)
 # )
 
-#vol_grids <- list.files('data/path_to_data/CONUS_connectivity_data/volume_validation/', pattern = "\\.tif$", full.names=TRUE)
+vol_grids <- list.files('data/path_to_data/CONUS_connectivity_data/volume_validation/', pattern = "\\.tif$", full.names=TRUE)
 
 
 
@@ -84,21 +84,22 @@ gageAnalysis <- tar_map(
   tar_target(gageQexc, calc_Qexc('deploy', gageRecord, gagePrepped, depthAHG),
             pattern=map(gageRecord),
             iteration='list'),
-  tar_target(gageFlux, buildGageFloodFunctions(huc4, BHGmodel, gageQexc, 'average of event means')), #the specifics of this calculation are hardcoded in gageQexc, but we add the description here
-  tar_target(gageFluxFlowProb, selectDepthandQ(gageFlux)), #USE THIS FUNCTION TO PICK THE FLOW PROBABILITY YOU'RE MODELING (see src/utils.R)
-  tar_target(gageVolume, runDEMModel(huc4, gageFluxFlowProb)),
+  tar_target(gageFlux, buildGageFloodFunctions(huc4, BHGmodel, gageQexc)), #the specifics of this calculation are hardcoded in gageQexc, but we add the description here
+  #tar_target(gageFluxFlowProb, selectDepthandQ(gageFlux)), #USE THIS FUNCTION TO PICK THE FLOW PROBABILITY YOU'RE MODELING (see src/utils.R)
+  tar_target(gageVolume, runDEMModel(huc4, gageFlux)),
 
   ## PREP FOR ML
   tar_target(gageForModel, addOtherNHDFeatures(gageVolume, huc4)),
+  tar_target(conusForModel, buildCONUSnetwork(huc4, BHGmodel)),
 
   ## PREP FOR MAPPING AND SUMMARIZING
-  tar_target(gage_df, makeGageDF(gage, gageForModel, huc4))
+  tar_target(gage_df, makeGageDF(gage, gageForModel, huc4)),
 
   ## VALIDATE VOLUME BATHTUB MODEL per HUC4
-  #tar_target(reaches_val, collectValReaches(huc4)),#grab reaches joined a priori to gage network (using gages as proxy for USGS volume model mainstems (b/c they are calibrated to these specific gages))
-  #tar_target(depths_val, wrangleDepthGrids(huc4, reaches_val, volVal)),
-  #tar_target(gageFlux_val, buildGageFloodFunctions_volumeval(huc4, BHGmodel, depths_val)), #also passes along the observed volumes, compared to the normal function above
-  #tar_target(gageVolume_val, runDEMModel(huc4, gageFlux_val))
+  tar_target(reaches_val, collectValReaches(huc4)),#grab reaches joined a priori to gage network (using gages as proxy for USGS volume model mainstems (b/c they are calibrated to these specific gages))
+  tar_target(depths_val, wrangleDepthGrids(huc4, reaches_val, volVal)),
+  tar_target(gageFlux_val, buildGageFloodFunctions_volumeval(huc4, BHGmodel, depths_val)), #also passes along the observed volumes, compared to the normal function above
+  tar_target(gageVolume_val, runDEMModel(huc4, gageFlux_val))
 )
 
 
@@ -112,23 +113,38 @@ list(
   tar_target(GWD, prepGWD()),
 
   ## ASSIGN HUC4 TO VOLUME VALIDATION DATA
-  #tar_target(volVal, assignVolVals(vol_grids)),
+  tar_target(volVal, assignVolVals(vol_grids)),
 
   ## RUN HUC4 ANALYSIS
   gageAnalysis,
 
   ## COMBINE HUC4 OBJECTS
-  #tar_combine(gageVolume_val_combined , gageAnalysis$gageVolume_val, command = dplyr::bind_rows(!!!.x)),
-  tar_combine(gageForModel_combined , gageAnalysis$gageForModel, command = dplyr::bind_rows(!!!.x)),
-  tar_target(modelDF, cleanUpDF(gageForModel_combined)),
-  tar_combine(gages_df_combined, gageAnalysis$gage_df, command=dplyr::bind_rows(!!!.x)),
-  tar_target(gagesDF, cleanUpGages(gages_df_combined, modelDF)),
+  tar_combine(gageVolume_val_combined, gageAnalysis$gageVolume_val, command = dplyr::bind_rows(!!!.x)),
+  tar_combine(gageForModel_combined, gageAnalysis$gageForModel, command = dplyr::bind_rows(!!!.x)), #gages for training
+  tar_target(modelDF, cleanUpDF(gageForModel_combined)), #gages for training
+  tar_combine(gages_df_combined, gageAnalysis$gage_df, command=dplyr::bind_rows(!!!.x)), #gages for map
+  tar_target(gagesDF, cleanUpGages(gages_df_combined, modelDF)), #gages for map
+  tar_combine(conusDF, gageAnalysis$conusForModel, command = dplyr::bind_rows(!!!.x)), #conus for deploy
 
   ## TRAIN ML MODELS
   tar_target(model_V_eval, trainModelEval_V(modelDF, nInnerFolds, nOuterFolds, numGrid, numRepeats)),
   tar_target(model_V, trainModelFin_V(modelDF, nInnerFolds, numGrid)),
   tar_target(model_Q_eval, trainModelEval_Q(modelDF, nInnerFolds, nOuterFolds, numGrid, numRepeats)),
   tar_target(model_Q, trainModelFin_Q(modelDF, nInnerFolds, numGrid)),
+
+  ## PREDICT MEAN MONTHLY TAU ACROSS UNITED STATES
+  tar_target(conus_fin_1, deployModel(conusDF, model_Q, model_V, 1)), #Jan
+  tar_target(conus_fin_2, deployModel(conusDF, model_Q, model_V, 2)), #Feb
+  tar_target(conus_fin_3, deployModel(conusDF, model_Q, model_V, 3)), #Mar
+  tar_target(conus_fin_4, deployModel(conusDF, model_Q, model_V, 4)), #Apr
+  tar_target(conus_fin_5, deployModel(conusDF, model_Q, model_V, 5)), #May
+  tar_target(conus_fin_6, deployModel(conusDF, model_Q, model_V, 6)), #Jun
+  tar_target(conus_fin_7, deployModel(conusDF, model_Q, model_V, 7)), #Jul
+  tar_target(conus_fin_8, deployModel(conusDF, model_Q, model_V, 8)), #Aug
+  tar_target(conus_fin_9, deployModel(conusDF, model_Q, model_V, 9)), #Sep
+  tar_target(conus_fin_10, deployModel(conusDF, model_Q, model_V, 10)), #Oct
+  tar_target(conus_fin_11, deployModel(conusDF, model_Q, model_V, 11)), #Nov
+  tar_target(conus_fin_12, deployModel(conusDF, model_Q, model_V, 12)), #Dec
 
   #EXCHANGE TIME VALIDATION VIA JACKNIFE REGRESSION (more or less a LOOCV for the regression models)
   tar_target(BHGmodel_jacknife, modelsJacknifeBHG()),
@@ -148,7 +164,10 @@ list(
           iteration='list'),
 
   ##FIGURES
-  #tar_target(fig_validationCalculation, makeCalculationValFig(gageVolume_val_combined, gageQexc_val)),
+  tar_target(fig_map, makeMap(conus_fin_1)),
+  #tar_target(fig_map_storage, makeMap_storage(conus_fin)),
+  tar_target(fig_SO, makeStreamOrderFig(conus_fin)),
+  tar_target(fig_validationCalculation, makeCalculationValFig(gageVolume_val_combined, gageQexc_val)),
   tar_target(fig_validationML, makeMLValFig(model_Q_eval, model_V_eval)),
   tar_target(fig_gageMap, makeGageMap(gagesDF)),
   tar_target(fig_VIP, makeVIPPlot(model_Q, model_V))

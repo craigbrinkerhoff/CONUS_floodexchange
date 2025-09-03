@@ -4,6 +4,297 @@
 
 
 
+makeMap <- function(conus_fin){
+    library(sf)
+    library(ggplot2)
+    theme_set(theme_classic())
+
+   # conus_fin <- conus_fin[1:250000,]
+
+    # CONUS boundary
+    states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
+    states <- dplyr::filter(states, !(NAME %in% c('Alaska',
+                                                'American Samoa',
+                                                'Commonwealth of the Northern Mariana Islands',
+                                                'Guam',
+                                                'District of Columbia',
+                                                'Puerto Rico',
+                                                'United States Virgin Islands',
+                                                'Hawaii'))) #remove non CONUS states/territories
+
+    states <- sf::st_union(states) %>%
+        sf::st_transform(crs=sf::st_crs(4326))
+
+    #floodplain
+	conus_fin <- conus_fin %>%
+        dplyr::mutate(tau_col = dplyr::case_when(
+            log10tau_hr <= -2 ~ '-2'
+            ,log10tau_hr <= -1 ~ '-1'
+            ,log10tau_hr <= 0 ~ '0'
+            ,log10tau_hr <= 1 ~ '1'
+            ,log10tau_hr <= 2 ~ '2'
+            ,TRUE ~ '3'))
+
+    conus_fin$tau_col <- factor(conus_fin$tau_col, levels = c('-2', '-1', '0', '1', '2', '3'))
+
+    map_fp <- ggplot(conus_fin) +
+        geom_sf(data=states,
+            color='black',
+            size=1,
+            alpha=0)+
+        geom_sf(aes(color= tau_col),#log10(TotDASqKm)),
+            linewidth = 0.2,
+            show.legend = "line") +
+     #   scale_linewidth(breaks = c(log10(10), log10(1000), log10(100000)), range=c(0.15, 1), guide='none')+
+        scale_color_manual(values=c('#264653', '#2a9d8f', '#8ab17d', '#e9c46a', '#f4a261', '#e76f51'),#palette='YlGnBu',
+                        labels=c(bquote(10^-2), bquote(10^-1), bquote(10^0), bquote(10^1), bquote(10^2), bquote(10^3)),
+                        name=bquote(bold(tau[flood]~'[hr]')))+
+        theme(axis.title = element_text(size=26, face='bold'),axis.text = element_text(family="Futura-Medium", size=20))+
+        theme(legend.position=c(0.9, 0.3))+
+        theme(text = element_text(family = "Futura-Medium"),
+            legend.title = element_text(face = "bold", size = 18),
+            legend.text = element_text(family = "Futura-Medium", size = 18),
+            plot.tag = element_text(size=26,
+                                    face='bold'))+
+        labs(tag='A')+
+        xlab('')+
+        ylab('')
+
+    #channel
+	conus_fin <- conus_fin %>%
+        dplyr::mutate(tau_col = dplyr::case_when(
+            log10tau_channel_hr <= -2 ~ '-2'
+            ,log10tau_channel_hr <= -1 ~ '-1'
+            ,log10tau_channel_hr <= 0 ~ '0'
+            ,log10tau_channel_hr <= 1 ~ '1'
+            ,log10tau_channel_hr <= 2 ~ '2'
+            ,TRUE ~ '3'))
+
+    conus_fin$tau_col <- factor(conus_fin$tau_col, levels = c('-2', '-1', '0', '1', '2', '3'))
+
+    map_ch <- ggplot(conus_fin) +
+        geom_sf(data=states,
+            color='black',
+            size=1,
+            alpha=0)+
+        geom_sf(aes(color= tau_col),# linewidth=log10(TotDASqKm)),
+            linewidth=0.2,
+            show.legend = "line") +
+        scale_linewidth(breaks = c(log10(10), log10(1000), log10(100000)), range=c(0.15, 1), guide='none')+
+        scale_color_manual(values=c('#264653', '#2a9d8f', '#8ab17d', '#e9c46a', '#f4a261', '#e76f51'), #palette='YlGnBu',
+                        labels=c(bquote(10^-2), bquote(10^-1), bquote(10^0), bquote(10^1), bquote(10^2), bquote(10^3)),
+                        name=bquote(bold(tau[channel]~'[hr]')))+
+        theme(axis.title = element_text(size=26, face='bold'),axis.text = element_text(family="Futura-Medium", size=20))+
+        theme(legend.position=c(0.9, 0.3))+
+        labs(tag='B')+
+        theme(text = element_text(family = "Futura-Medium"),
+            legend.title = element_text(face = "bold", size = 18),
+            legend.text = element_text(family = "Futura-Medium", size = 18),
+            plot.tag = element_text(size=26,
+                                    face='bold'))+
+        xlab('')+
+        ylab('')
+    
+    layout <- "
+    A
+    B
+    "
+
+    combo_plot <- patchwork::wrap_plots(A=map_fp, B=map_ch, design=layout)
+
+    ggsave('cache/mainTauMap.png', combo_plot, width=13, height=15)
+
+
+}
+
+
+
+
+
+
+# makeMap_storage <- function(conus_fin){
+#     library(sf)
+#     library(ggplot2)
+#     theme_set(theme_classic())
+
+#    # conus_fin <- conus_fin[1:250000,]
+
+#     # CONUS boundary
+#     states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
+#     states <- dplyr::filter(states, !(NAME %in% c('Alaska',
+#                                                 'American Samoa',
+#                                                 'Commonwealth of the Northern Mariana Islands',
+#                                                 'Guam',
+#                                                 'District of Columbia',
+#                                                 'Puerto Rico',
+#                                                 'United States Virgin Islands',
+#                                                 'Hawaii'))) #remove non CONUS states/territories
+
+#     states <- sf::st_union(states) %>%
+#         sf::st_transform(crs=sf::st_crs(4326))
+
+#     #floodplain
+# 	conus_fin <- conus_fin %>%
+#         dplyr::filter(waterbody_type == 'river') %>%
+#         dplyr::mutate(tau_col = dplyr::case_when(
+#             log10V_m3 <= 3 ~ '3'
+#             ,log10V_m3 <= 4 ~ '4'
+#             ,log10V_m3 <= 5 ~ '5'
+#             ,log10V_m3 <= 6 ~ '6'
+#             ,TRUE ~ '7'))
+
+#     conus_fin$tau_col <- factor(conus_fin$tau_col, levels = c('3', '4', '5', '6', '7'))
+
+#     map_fp <- ggplot(conus_fin) +
+#         geom_sf(data=states,
+#             color='black',
+#             size=1,
+#             alpha=0)+
+#         geom_sf(aes(color= tau_col),
+#             linewidth = 0.2,
+#             show.legend = "line") +
+#      #   scale_linewidth(breaks = c(log10(10), log10(1000), log10(100000)), range=c(0.15, 1), guide='none')+
+#         scale_color_manual(values=c('#dad7cd', '#a3b18a', '#588157', '#3a5a40', '#344e41'),
+#                         labels=c(bquote(10^3), bquote(10^4), bquote(10^5), bquote(10^6), bquote(10^7)),
+#                         name=bquote(bold(Mean~event~V~'[m3]')))+
+#         theme(axis.title = element_text(size=26, face='bold'),axis.text = element_text(family="Futura-Medium", size=20))+
+#         theme(legend.position=c(0.9, 0.3))+
+#         theme(text = element_text(family = "Futura-Medium"),
+#             legend.title = element_text(face = "bold", size = 18),
+#             legend.text = element_text(family = "Futura-Medium", size = 18),
+#             plot.tag = element_text(size=26,
+#                                     face='bold'))+
+#         labs(tag='A')+
+#         xlab('')+
+#         ylab('')
+
+    # #channel
+	# conus_fin <- conus_fin %>%
+    #     dplyr::mutate(tau_col = dplyr::case_when(
+    #         log10tau_channel_hr <= -2 ~ '-2'
+    #         ,log10tau_channel_hr <= -1 ~ '-1'
+    #         ,log10tau_channel_hr <= 0 ~ '0'
+    #         ,log10tau_channel_hr <= 1 ~ '1'
+    #         ,log10tau_channel_hr <= 2 ~ '2'
+    #         ,TRUE ~ '3'))
+
+    # conus_fin$tau_col <- factor(conus_fin$tau_col, levels = c('-2', '-1', '0', '1', '2', '3'))
+
+    # map_ch <- ggplot(conus_fin) +
+    #     geom_sf(data=states,
+    #         color='black',
+    #         size=1,
+    #         alpha=0)+
+    #     geom_sf(aes(color= tau_col),# linewidth=log10(TotDASqKm)),
+    #         linewidth=0.2,
+    #         show.legend = "line") +
+    #     scale_linewidth(breaks = c(log10(10), log10(1000), log10(100000)), range=c(0.15, 1), guide='none')+
+    #     scale_color_manual(values=c('#264653', '#2a9d8f', '#8ab17d', '#e9c46a', '#f4a261', '#e76f51'), #palette='YlGnBu',
+    #                     labels=c(bquote(10^-2), bquote(10^-1), bquote(10^0), bquote(10^1), bquote(10^2), bquote(10^3)),
+    #                     name=bquote(bold(tau[channel]~'[hr]')))+
+    #     theme(axis.title = element_text(size=26, face='bold'),axis.text = element_text(family="Futura-Medium", size=20))+
+    #     theme(legend.position=c(0.9, 0.3))+
+    #     labs(tag='B')+
+    #     theme(text = element_text(family = "Futura-Medium"),
+    #         legend.title = element_text(face = "bold", size = 18),
+    #         legend.text = element_text(family = "Futura-Medium", size = 18),
+    #         plot.tag = element_text(size=26,
+    #                                 face='bold'))+
+    #     xlab('')+
+    #     ylab('')
+    
+    # layout <- "
+    # A
+    # B
+    # "
+
+    # combo_plot <- patchwork::wrap_plots(A=map_fp, B=map_ch, design=layout)
+
+#     ggsave('cache/mainMap.png', map_fp, width=13, height=7)
+
+
+# }
+
+
+
+
+
+
+
+makeStreamOrderFig <- function(conus_fin){
+    library(ggplot2)
+    theme_set(theme_classic())
+
+    #stream order boxplots
+    forPlot <- conus_fin %>%
+        tidyr::gather(key=key, value=value, c('log10tau_hr', 'log10tau_channel_hr'))
+    boxplot <- ggplot(forPlot, aes(x=factor(StreamCalc), y=10^value, fill=key), color='black')+
+        geom_boxplot() +
+        scale_fill_manual(values=c('#86bbd8', '#b1b695'), name='', labels=c('Channel', 'Flood')) +
+        scale_y_log10(guide = "axis_logticks",  labels = scales::label_log(base=10))+
+        theme(axis.title = element_text(size=22, face='bold'),
+            axis.text = element_text(family="Futura-Medium", size=20))+
+        theme(legend.position='bottom')+
+        theme(text = element_text(family = "Futura-Medium"),
+            legend.title = element_text(face = "bold", size = 18),
+            legend.text = element_text(family = "Futura-Medium", size = 18),
+            plot.tag = element_text(size=26,
+                                    face='bold'))+
+        xlab(bquote(bold(Stream~Order)))+
+        ylab(bquote(bold(tau~'[hr]'))) +
+        labs(tag="A")
+    
+    #flood tau histogram
+    histFlood <- ggplot(conus_fin, aes(x=10^log10tau_hr)) +
+        geom_histogram(color='black', linewidth=1, fill='#b1b695', bins=50) +
+        scale_x_log10(guide = "axis_logticks",  labels = scales::label_log(base=10), limits=c(10^-5, 10^4))+
+        scale_y_continuous(breaks=c(50000, 150000, 250000), labels=c(50000, 150000, 250000))+
+        coord_cartesian(ylim=c(0, 300000))+
+        theme(axis.title = element_text(size=22, face='bold'),
+            axis.text = element_text(family="Futura-Medium", size=20))+
+        theme(legend.position='bottom')+
+        theme(text = element_text(family = "Futura-Medium"),
+            legend.title = element_text(face = "bold", size = 18),
+            legend.text = element_text(family = "Futura-Medium", size = 18),
+            plot.tag = element_text(size=26,
+                                    face='bold'))+
+        ylab('')+
+        xlab(bquote(bold(tau[flood]~'[hr]'))) +
+        labs(tag='C')
+
+    #channel tau histogram
+    histChannel <- ggplot(conus_fin, aes(x=10^log10tau_channel_hr)) +
+        geom_histogram(color='black', linewidth=1, fill='#86bbd8', bins=50) +
+        scale_x_log10(guide = "axis_logticks",  labels = scales::label_log(base=10),  limits=c(10^-5, 10^4))+
+        scale_y_continuous(breaks=c(50000, 150000, 250000), labels=c(50000, 150000, 250000))+
+        coord_cartesian(ylim=c(0, 300000))+
+        theme(axis.title = element_text(size=22, face='bold'),
+            axis.text = element_text(family="Futura-Medium", size=20))+
+        theme(legend.position='bottom')+
+        theme(text = element_text(family = "Futura-Medium"),
+            legend.title = element_text(face = "bold", size = 18),
+            legend.text = element_text(family = "Futura-Medium", size = 18),
+            plot.tag = element_text(size=26,
+                                    face='bold'))+
+        ylab(bquote(bold(Count)))+
+        xlab(bquote(bold(tau[channel]~'[hr]'))) +
+        labs(tag='B')
+
+    #combo plot
+    layout <- "
+    AA
+    AA
+    BC
+    "
+
+    combo_plot <- patchwork::wrap_plots(A=boxplot, B=histChannel, C=histFlood, design=layout)
+
+    ggsave('cache/distributions.png', combo_plot, height=12, width=10)
+}
+
+
+
+
 
 makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){    
     library(ggplot2)
@@ -110,7 +401,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V){
         geom_abline(linetype='dashed', color='darkgrey', linewidth=1.75) +
         geom_point(pch=21, size=8, color='black', fill='#a3b18a') +
         geom_smooth(method='lm', se=F, linewidth=2, color='black')+
-        annotate("text", x = 1e5, y = 1e10, label = bquote(bold(n:~.(nrow(full_predictions_Q))~'gages')), size=8, color='#a3b18a')+
+        annotate("text", x = 1e5, y = 1e10, label = bquote(bold(n:~.(nrow(full_predictions_Q)))), size=8, color='#a3b18a')+
         annotate("text", x = 1e5, y = 10^9.5, label = bquote(bold(r^2*':'~.(r2_Q))), size=8, color='#a3b18a')+
         scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e3, 1e10))+
         scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e3, 1e10))+
@@ -127,7 +418,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V){
         geom_abline(linetype='dashed', color='darkgrey', linewidth=1.75) +
         geom_point(pch=21, size=8, color='black', fill='#588157') +
         geom_smooth(method='lm', se=F, linewidth=2, color='black')+
-        annotate("text", x = 1e3, y = 1e9, label = bquote(bold(n:~.(nrow(full_predictions_V))~'gages')), size=8, color='#588157')+
+        annotate("text", x = 1e3, y = 1e9, label = bquote(bold(n:~.(nrow(full_predictions_V)))), size=8, color='#588157')+
         annotate("text", x = 1e3, y = 10^8.5, label = bquote(bold(r^2*':'~.(r2_V))), size=8, color='#588157')+
         scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e1, 1e9))+
         scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e1, 1e9))+
@@ -153,10 +444,10 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V){
         geom_point(pch=21, size=8, color='black', fill='#3a5a40') +
         geom_smooth(method='lm', se=F, linewidth=2, color='black')+
        # coord_cartesian(xlim=c(1,20), ylim=c(1,20))+
-        annotate("text", x = 10^-2, y = 10^4, label = bquote(bold(n:~.(nrow(full_predictions))~'gages')), size=8, color='#3a5a40')+ #7.5 30
-        annotate("text", x = 10^-2, y = 10^3.5, label = bquote(bold(r^2*':'~.(r2))), size=8, color='#3a5a40')+ #7.5 28.5
-        scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e-4, 1e4))+
-        scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e-4, 1e4))+
+        annotate("text", x = 10^-2, y = 10^5, label = bquote(bold(n:~.(nrow(full_predictions)))), size=8, color='#3a5a40')+ #7.5 30
+        annotate("text", x = 10^-2, y = 10^4.5, label = bquote(bold(r^2*':'~.(r2))), size=8, color='#3a5a40')+ #7.5 28.5
+        scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e-4, 1e5))+
+        scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e-4, 1e5))+
         xlab(bquote(bold('Observed'~tau[flood]~'[hr]')))+
         ylab(bquote(bold('Modeled'~tau[flood]~'[hr]')))+
         theme(axis.title=element_text(face='bold', size=18),
