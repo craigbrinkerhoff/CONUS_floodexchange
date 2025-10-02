@@ -1,15 +1,37 @@
 ## Utility functions
 ## Craig Brinkerhoff
-## Summer 2025
+## Fall 2025
 
 
 
-selectDepthandQ <- function(gageFlux){
-  gageFlux$Htf_m <- gageFlux$meanHtf_m
-  gageFlux$Qexc_m3dy <- gageFlux$meanQexc_m3dy
+grabSeasonality <- function(conus_fin, month){
+  out <- data.frame('month'=month,
+                  'log10tau_hr'=conus_fin$log10tau_hr,
+                  'log10tau_channel_hr'=conus_fin$log10tau_channel_hr)
 
-  return(gageFlux)
+  return(out)
 }
+
+
+
+grabAllGages <- function(huc4){
+  huc2 <- substr(huc4, 1, 2)
+
+  network_gages <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'), layer='NHDPlusEROMQAMA', quiet=TRUE)
+  network_gages <- network_gages %>%
+    dplyr::select('GageID')
+  return(network_gages)
+}
+
+
+
+
+# selectDepthandQ <- function(gageFlux){
+#   gageFlux$Htf_m <- gageFlux$meanHtf_m
+#   gageFlux$Qexc_m3dy <- gageFlux$meanQexc_m3dy
+
+#   return(gageFlux)
+# }
 
 
 
@@ -17,7 +39,8 @@ selectDepthandQ <- function(gageFlux){
 cleanUpDF <- function(df){
   out <- df %>%
     tidyr::drop_na(V_m3) %>%
-    tidyr::drop_na(Qexc_m3dy)
+    tidyr::drop_na(Qexc_m3dy) %>%
+    tidyr::drop_na(Q_m3dy)
 
   return(out)
 }
@@ -189,34 +212,6 @@ fixGeometries <- function(rivnet){
 
 
 
-prepGWD <- function(){
-    #prep barriers dataset
-    states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
-    states <- dplyr::filter(states, !(NAME %in% c('Alaska',
-                                                'American Samoa',
-                                                'Commonwealth of the Northern Mariana Islands',
-                                                'Guam',
-                                                'District of Columbia',
-                                                'Puerto Rico',
-                                                'United States Virgin Islands',
-                                                'Hawaii'))) #remove non CONUS states/territories
-
-    states <- sf::st_union(states) %>%
-        sf::st_transform(crs=sf::st_crs(4326))
-
-    #append dam drainage areas via the GDW (Global Dam Watch database- https://www.globaldamwatch.org/database)
-    barriers <- sf::st_read('data/path_to_data/CONUS_sediment_data/GDW_barriers_v1_0.shp') %>%
-        sf::st_intersection(states) %>%
-        dplyr::filter(INSTREAM == 'Instream') %>% #remove offstream barriers not on hydrosheds/hydrobasins framework
-        dplyr::filter(DAM_TYPE %in% c('Dam', 'Lake Control Dam', 'Low Permeable Dam')) %>% #remove locks, which don't trap sediment in the way we care about here
-        dplyr::mutate(RESV_CATCH_SKM = CATCH_SKM)%>%
-        dplyr::select(c('HYRIV_ID', 'RESV_CATCH_SKM'))
-    
-    return(barriers)
-}
-
-
-
 #Our bandaid version of readNWISrating that manually constructs our own exsa url
 readNWISrating_CRAIG <- function(siteNumber, type='base', convertType = TRUE) {
 
@@ -263,3 +258,32 @@ makeGageDF <- function(gage, model_gages, huc4){
 
   return(out)
 }
+
+
+
+
+# prepGWD <- function(){
+#     #prep barriers dataset
+#     states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
+#     states <- dplyr::filter(states, !(NAME %in% c('Alaska',
+#                                                 'American Samoa',
+#                                                 'Commonwealth of the Northern Mariana Islands',
+#                                                 'Guam',
+#                                                 'District of Columbia',
+#                                                 'Puerto Rico',
+#                                                 'United States Virgin Islands',
+#                                                 'Hawaii'))) #remove non CONUS states/territories
+
+#     states <- sf::st_union(states) %>%
+#         sf::st_transform(crs=sf::st_crs(4326))
+
+#     #append dam drainage areas via the GDW (Global Dam Watch database- https://www.globaldamwatch.org/database)
+#     barriers <- sf::st_read('data/path_to_data/CONUS_sediment_data/GDW_barriers_v1_0.shp') %>%
+#         sf::st_intersection(states) %>%
+#         dplyr::filter(INSTREAM == 'Instream') %>% #remove offstream barriers not on hydrosheds/hydrobasins framework
+#         dplyr::filter(DAM_TYPE %in% c('Dam', 'Lake Control Dam', 'Low Permeable Dam')) %>% #remove locks, which don't trap sediment in the way we care about here
+#         dplyr::mutate(RESV_CATCH_SKM = CATCH_SKM)%>%
+#         dplyr::select(c('HYRIV_ID', 'RESV_CATCH_SKM'))
+    
+#     return(barriers)
+# }
