@@ -4,13 +4,6 @@
 
 
 
-grabSeasonality <- function(conus_fin, month){
-  out <- data.frame('month'=month,
-                  'log10tau_hr'=conus_fin$log10tau_hr,
-                  'log10tau_channel_hr'=conus_fin$log10tau_channel_hr)
-
-  return(out)
-}
 
 
 
@@ -26,16 +19,6 @@ grabAllGages <- function(huc4){
 
 
 
-# selectDepthandQ <- function(gageFlux){
-#   gageFlux$Htf_m <- gageFlux$meanHtf_m
-#   gageFlux$Qexc_m3dy <- gageFlux$meanQexc_m3dy
-
-#   return(gageFlux)
-# }
-
-
-
-
 cleanUpDF <- function(df){
   out <- df %>%
     tidyr::drop_na(V_m3) %>%
@@ -44,6 +27,9 @@ cleanUpDF <- function(df){
 
   return(out)
 }
+
+
+
 
 
 cleanUpGages <- function(gages_df_combined, modelDF){
@@ -180,9 +166,6 @@ modelsBHG <- function(){
 
 
 
-
-
-
 dataBHG <- function(){
   dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
     dplyr::select(c('USGS Station No.', 'Physiographic Division', '...9', '...11','...13')) #some necessary manual munging for colnames from dataset
@@ -212,40 +195,6 @@ fixGeometries <- function(rivnet){
 
 
 
-#Our bandaid version of readNWISrating that manually constructs our own exsa url
-readNWISrating_CRAIG <- function(siteNumber, type='base', convertType = TRUE) {
-
-  # No rating xml service
-  #BROKEN AS OF 3/21/25. NWIS seems to have changed internal urls for rating tables, so dataRetrieval::readNWISrating() breaks because dataRetrieval::constructNWISURL() breaks. A band-aid is to directly constructing our own url using a custom version of readNWISrating() (in ~/src/utils.R), circumventing readNWISdata.
-  #url <- constructNWISURL(siteNumber, service = "rating", ratingType = type)
-  url <- paste0('https://waterdata.usgs.gov/nwisweb/data/ratings/', type, '/USGS.', siteNumber, '.', type, '.rdb')
-
-  data <- dataRetrieval::importRDB1(url, asDateTime = FALSE, convertType = convertType)
-
-  if ("current_rating_nu" %in% names(data)) {
-    intColumns <- intColumns[!("current_rating_nu" %in% names(data)[intColumns])]
-    data$current_rating_nu <- gsub(" ", "", data$current_rating_nu)
-  }
-
-  if (nrow(data) > 0) {
-    if (type == "base") {
-      Rat <- grep("//RATING ", comment(data), value = TRUE, fixed = TRUE)
-      Rat <- sub("# //RATING ", "", Rat)
-      Rat <- scan(text = Rat, sep = " ", what = "")
-      attr(data, "RATING") <- Rat
-    }
-
-    siteInfo <- suppressMessages(dataRetrieval::readNWISsite(siteNumbers = siteNumber))
-
-    attr(data, "siteInfo") <- siteInfo
-    attr(data, "variableInfo") <- NULL
-    attr(data, "statisticInfo") <- NULL
-  }
-
-  return(data)
-}
-
-
 
 
 makeGageDF <- function(gage, model_gages, huc4){
@@ -262,28 +211,35 @@ makeGageDF <- function(gage, model_gages, huc4){
 
 
 
-# prepGWD <- function(){
-#     #prep barriers dataset
-#     states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
-#     states <- dplyr::filter(states, !(NAME %in% c('Alaska',
-#                                                 'American Samoa',
-#                                                 'Commonwealth of the Northern Mariana Islands',
-#                                                 'Guam',
-#                                                 'District of Columbia',
-#                                                 'Puerto Rico',
-#                                                 'United States Virgin Islands',
-#                                                 'Hawaii'))) #remove non CONUS states/territories
+# #Our bandaid version of readNWISrating that manually constructs our own exsa url (for when the dataRetrieval function broke one time)
+# readNWISrating_CRAIG <- function(siteNumber, type='base', convertType = TRUE) {
 
-#     states <- sf::st_union(states) %>%
-#         sf::st_transform(crs=sf::st_crs(4326))
+#   # No rating xml service
+#   #BROKEN AS OF 3/21/25. NWIS seems to have changed internal urls for rating tables, so dataRetrieval::readNWISrating() breaks because dataRetrieval::constructNWISURL() breaks. A band-aid is to directly constructing our own url using a custom version of readNWISrating() (in ~/src/utils.R), circumventing readNWISdata.
+#   #url <- constructNWISURL(siteNumber, service = "rating", ratingType = type)
+#   url <- paste0('https://waterdata.usgs.gov/nwisweb/data/ratings/', type, '/USGS.', siteNumber, '.', type, '.rdb')
 
-#     #append dam drainage areas via the GDW (Global Dam Watch database- https://www.globaldamwatch.org/database)
-#     barriers <- sf::st_read('data/path_to_data/CONUS_sediment_data/GDW_barriers_v1_0.shp') %>%
-#         sf::st_intersection(states) %>%
-#         dplyr::filter(INSTREAM == 'Instream') %>% #remove offstream barriers not on hydrosheds/hydrobasins framework
-#         dplyr::filter(DAM_TYPE %in% c('Dam', 'Lake Control Dam', 'Low Permeable Dam')) %>% #remove locks, which don't trap sediment in the way we care about here
-#         dplyr::mutate(RESV_CATCH_SKM = CATCH_SKM)%>%
-#         dplyr::select(c('HYRIV_ID', 'RESV_CATCH_SKM'))
-    
-#     return(barriers)
+#   data <- dataRetrieval::importRDB1(url, asDateTime = FALSE, convertType = convertType)
+
+#   if ("current_rating_nu" %in% names(data)) {
+#     intColumns <- intColumns[!("current_rating_nu" %in% names(data)[intColumns])]
+#     data$current_rating_nu <- gsub(" ", "", data$current_rating_nu)
+#   }
+
+#   if (nrow(data) > 0) {
+#     if (type == "base") {
+#       Rat <- grep("//RATING ", comment(data), value = TRUE, fixed = TRUE)
+#       Rat <- sub("# //RATING ", "", Rat)
+#       Rat <- scan(text = Rat, sep = " ", what = "")
+#       attr(data, "RATING") <- Rat
+#     }
+
+#     siteInfo <- suppressMessages(dataRetrieval::readNWISsite(siteNumbers = siteNumber))
+
+#     attr(data, "siteInfo") <- siteInfo
+#     attr(data, "variableInfo") <- NULL
+#     attr(data, "statisticInfo") <- NULL
+#   }
+
+#   return(data)
 # }

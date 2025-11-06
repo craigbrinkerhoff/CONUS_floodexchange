@@ -5,26 +5,133 @@
 
 
 
+runDOMExperiment <- function(df){
+    k_dy <- 0.22 #d^-1 Raymond et al 2016 & Kaplan et al. 2006
 
-buildBasinShapefile <- function(combined_basinSummary){
-    #load in and build huc4 shapefile
-    huc2s <- c('01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18')
-    for(i in huc2s) {
-        basins <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', i, '/WBD_', i, '_HU2_Shape/Shape/WBDHU4.shp')) %>%
-            dplyr::select(c('huc4', 'name'))
-        basins <- fixGeometries(basins)
-        if(i == '01'){
-            basins_fin <- basins
-        } else{
-            basins_fin <- rbind(basins_fin, basins)
-        }
-    }
+    #assumes orders 1-3 are headwaters, DA approx lines up with Raymond & Saiers 2010
+    headwater <- df %>%
+        sf::st_drop_geometry() %>%
+        dplyr::filter(StreamCalc <= 3) %>%
+        dplyr::mutate(Q_cm_dy = ((10^log10Q_m3dy) / TotDASqKm)*100*(1/1e6)) %>%
+        dplyr::group_by(prob) %>%
+        dplyr::summarize(medianAc_km2 = median(TotDASqKm),
+                        medianQ_m3dy = median(10^(log10Q_m3dy)),
+                        mediantau_head_dy = median(10^(log10tau_channel_hr)) *24,
+                        C_head_in_mg_L = 1.02*mean(medianQ_m3dy)^0.345, #mg/L
+                        C_head_out_mg_L = C_head_in_mg_L *exp(-k_dy*mediantau_head_dy),
+                        F_head_out_g_m2_dy = (C_head_out_mg_L*medianQ_m3dy)*(1/medianAc_km2)*(1/1e6)) %>%
+        dplyr::select(c('prob', 'F_head_out_g_m2_dy'))
 
-    basins_fin <- basins_fin %>%
-        dplyr::inner_join(combined_basinSummary, by='huc4')
-    
-    return(basins_fin)
+    #remaining stream orders
+    fourth_order <- df %>%
+        sf::st_drop_geometry() %>%
+        dplyr::filter(StreamCalc == 4) %>%
+        dplyr::left_join(headwater, by='prob')%>%
+        dplyr::mutate(Q_cm_dy = ((10^log10Q_m3dy) / TotDASqKm)*100*(1/1e6)) %>%
+        dplyr::group_by(prob) %>%
+        dplyr::summarize(mediantau_dy = median(10^(log10tau_channel_hr)) *24,
+                        mediantau_flood_dy = median(10^(log10tau_hr)) *24,
+                        medianweightedtau_dy = weighted.mean(c(mediantau_dy, mediantau_flood_dy), c((1-(10^(median(log10Qexc_m3dy))/10^(median(log10Q_m3dy)))), ((10^(median(log10Qexc_m3dy))/10^(median(log10Q_m3dy)))))),
+                        F_head_out_g_m2_dy = first(F_head_out_g_m2_dy),
+                        F_fourth_out_g_m2_dy = mean(F_head_out_g_m2_dy*exp(-k_dy*mediantau_dy)),
+                        F_fourth_out_flood_g_m2_dy = mean(F_head_out_g_m2_dy*exp(-k_dy*medianweightedtau_dy)))                        
+
+    fifth_order <- df %>%
+        sf::st_drop_geometry() %>%
+        dplyr::filter(StreamCalc == 5) %>%
+        dplyr::left_join(fourth_order, by='prob')%>%
+        dplyr::mutate(Q_cm_dy = ((10^log10Q_m3dy) / TotDASqKm)*100*(1/1e6)) %>%
+        dplyr::group_by(prob) %>%
+        dplyr::summarize(mediantau_dy = median(10^(log10tau_channel_hr)) *24,
+                        mediantau_flood_dy = median(10^(log10tau_hr)) *24,
+                        medianweightedtau_dy = weighted.mean(c(mediantau_dy, mediantau_flood_dy), c((1-(10^(median(log10Qexc_m3dy))/10^(median(log10Q_m3dy)))), ((10^(median(log10Qexc_m3dy))/10^(median(log10Q_m3dy)))))),
+                        F_head_out_g_m2_dy = first(F_head_out_g_m2_dy),
+                        F_fourth_out_g_m2_dy = first(F_fourth_out_g_m2_dy),
+                        F_fourth_out_flood_g_m2_dy = first(F_fourth_out_flood_g_m2_dy),
+                        F_fifth_out_g_m2_dy = mean(F_fourth_out_g_m2_dy*exp(-k_dy*mediantau_dy)),
+                        F_fifth_out_flood_g_m2_dy = mean(F_fourth_out_flood_g_m2_dy*exp(-k_dy*medianweightedtau_dy)))
+
+    sixth_order <- df %>%
+        sf::st_drop_geometry() %>%
+        dplyr::filter(StreamCalc == 6) %>%
+        dplyr::left_join(fifth_order, by='prob')%>%
+        dplyr::mutate(Q_cm_dy = ((10^log10Q_m3dy) / TotDASqKm)*100*(1/1e6)) %>%
+        dplyr::group_by(prob) %>%
+        dplyr::summarize(mediantau_dy = median(10^(log10tau_channel_hr)) *24,
+                        mediantau_flood_dy = median(10^(log10tau_hr)) *24,
+                        medianweightedtau_dy = weighted.mean(c(mediantau_dy, mediantau_flood_dy), c((1-(10^(median(log10Qexc_m3dy))/10^(median(log10Q_m3dy)))), ((10^(median(log10Qexc_m3dy))/10^(median(log10Q_m3dy)))))),
+                        F_head_out_g_m2_dy = first(F_head_out_g_m2_dy),
+                        F_fourth_out_g_m2_dy = first(F_fourth_out_g_m2_dy),
+                        F_fourth_out_flood_g_m2_dy = first(F_fourth_out_flood_g_m2_dy),
+                        F_fifth_out_g_m2_dy = first(F_fifth_out_g_m2_dy),
+                        F_fifth_out_flood_g_m2_dy = first(F_fifth_out_flood_g_m2_dy),
+                        F_sixth_out_g_m2_dy = mean(F_fifth_out_g_m2_dy*exp(-k_dy*mediantau_dy)),
+                        F_sixth_out_flood_g_m2_dy = mean(F_fifth_out_flood_g_m2_dy*exp(-k_dy*medianweightedtau_dy)))
+
+    seventh_order <- df %>%
+        sf::st_drop_geometry() %>%
+        dplyr::filter(StreamCalc == 7) %>%
+        dplyr::left_join(sixth_order, by='prob')%>%
+        dplyr::mutate(Q_cm_dy = ((10^log10Q_m3dy) / TotDASqKm)*100*(1/1e6)) %>%
+        dplyr::group_by(prob) %>%
+        dplyr::summarize(mediantau_dy = median(10^(log10tau_channel_hr)) *24,
+                        mediantau_flood_dy = median(10^(log10tau_hr)) *24,
+                        medianweightedtau_dy = weighted.mean(c(mediantau_dy, mediantau_flood_dy), c((1-(10^(median(log10Qexc_m3dy))/10^(median(log10Q_m3dy)))), ((10^(median(log10Qexc_m3dy))/10^(median(log10Q_m3dy)))))),
+                        F_head_out_g_m2_dy = first(F_head_out_g_m2_dy),
+                        F_fourth_out_g_m2_dy = first(F_fourth_out_g_m2_dy),
+                        F_fourth_out_flood_g_m2_dy = first(F_fourth_out_flood_g_m2_dy),
+                        F_fifth_out_g_m2_dy = first(F_fifth_out_g_m2_dy),
+                        F_fifth_out_flood_g_m2_dy = first(F_fifth_out_flood_g_m2_dy),
+                        F_sixth_out_g_m2_dy = first(F_sixth_out_g_m2_dy),
+                        F_sixth_out_flood_g_m2_dy = first(F_sixth_out_flood_g_m2_dy),
+                        F_seventh_out_g_m2_dy = mean(F_sixth_out_g_m2_dy*exp(-k_dy*mediantau_dy)),
+                        F_seventh_out_flood_g_m2_dy = mean(F_sixth_out_flood_g_m2_dy*exp(-k_dy*medianweightedtau_dy)))
+
+    eighth_order <- df %>%
+        sf::st_drop_geometry() %>%
+        dplyr::filter(StreamCalc == 8) %>%
+        dplyr::left_join(seventh_order, by='prob')%>%
+        dplyr::mutate(Q_cm_dy = ((10^log10Q_m3dy) / TotDASqKm)*100*(1/1e6)) %>%
+        dplyr::group_by(prob) %>%
+        dplyr::summarize(mediantau_dy = median(10^(log10tau_channel_hr)) *24,
+                        mediantau_flood_dy = median(10^(log10tau_hr)) *24,
+                        medianweightedtau_dy = weighted.mean(c(mediantau_dy, mediantau_flood_dy), c((1-(10^(median(log10Qexc_m3dy))/10^(median(log10Q_m3dy)))), ((10^(median(log10Qexc_m3dy))/10^(median(log10Q_m3dy)))))),
+                        F_head_out_g_m2_dy = first(F_head_out_g_m2_dy),
+                        F_fourth_out_g_m2_dy = first(F_fourth_out_g_m2_dy),
+                        F_fourth_out_flood_g_m2_dy = first(F_fourth_out_flood_g_m2_dy),
+                        F_fifth_out_g_m2_dy = first(F_fifth_out_g_m2_dy),
+                        F_fifth_out_flood_g_m2_dy = first(F_fifth_out_flood_g_m2_dy),
+                        F_sixth_out_g_m2_dy = first(F_sixth_out_g_m2_dy),
+                        F_sixth_out_flood_g_m2_dy = first(F_sixth_out_flood_g_m2_dy),
+                        F_seventh_out_g_m2_dy = first(F_seventh_out_g_m2_dy),
+                        F_seventh_out_flood_g_m2_dy = first(F_seventh_out_flood_g_m2_dy),
+                        F_eighth_out_g_m2_dy = mean(F_seventh_out_g_m2_dy*exp(-k_dy*mediantau_dy)),
+                        F_eighth_out_flood_g_m2_dy = mean(F_seventh_out_flood_g_m2_dy*exp(-k_dy*medianweightedtau_dy)))
+
+    out_noflood <- eighth_order %>%
+        tidyr::gather(key=key_noflood, value=value_noflood, c('F_head_out_g_m2_dy', 'F_fourth_out_g_m2_dy', 'F_fifth_out_g_m2_dy', 'F_sixth_out_g_m2_dy', 'F_seventh_out_g_m2_dy', 'F_eighth_out_g_m2_dy')) %>%
+        dplyr::select(c('prob', 'key_noflood', 'value_noflood')) %>%
+        dplyr::mutate(StreamCalc=c('Headwater', 'Headwater', 'Headwater', 'Headwater', '4', '4', '4', '4', '5', '5', '5', '5', '6', '6', '6', '6', '7', '7', '7', '7', '8', '8', '8', '8'))
+
+    out_flood <- eighth_order %>%
+        tidyr::gather(key=key_flood, value=value_flood, c('F_head_out_g_m2_dy', 'F_fourth_out_flood_g_m2_dy', 'F_fifth_out_flood_g_m2_dy', 'F_sixth_out_flood_g_m2_dy', 'F_seventh_out_flood_g_m2_dy', 'F_eighth_out_flood_g_m2_dy')) %>%
+        dplyr::select(c('prob', 'key_flood', 'value_flood')) %>%
+        dplyr::mutate(StreamCalc=c('Headwater', 'Headwater', 'Headwater', 'Headwater', '4', '4', '4', '4', '5', '5', '5', '5', '6', '6', '6', '6', '7', '7', '7', '7', '8', '8', '8', '8'))
+
+    out <- out_flood %>%
+        dplyr::left_join(out_noflood, by=c('prob', 'StreamCalc')) %>%
+        tidyr::gather(key=key_fin, value=value_fin, c('value_flood', 'value_noflood')) %>%
+        dplyr::mutate(StreamCalc = factor(StreamCalc, levels=c('Headwater',  '4',  '5', '6', '7', '8')),
+                    prob = ifelse(prob == 0.02, '2% flood',
+                                ifelse(prob == 0.10, '10% flood',
+                                    ifelse(prob == 0.20, '20% flood',
+                                        ifelse(prob==0.50, '50% flood',NA))))) %>%
+        dplyr::mutate(prob = factor(prob, levels=c('2% flood','10% flood','20% flood','50% flood')))
+
+    return(out)
 }
+
+
 
 
 
@@ -141,8 +248,12 @@ buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, min_floods) {
     gageDF_50 <- dplyr::bind_rows(gageDF) %>%
         dplyr::filter(Qexc_m3dy > 0) %>% # integration necessitates storms be 2+ days long to calculate a flux
         dplyr::mutate(prob = 0.50)
+    
+    gageDF_20 <- dplyr::bind_rows(gageDF) %>%
+        dplyr::filter(Qexc_m3dy > 0) %>% # integration necessitates storms be 2+ days long to calculate a flux
+        dplyr::mutate(prob = 0.20)
 
-    gageDF <- rbind(gageDF_02, gageDF_10, gageDF_50)
+    gageDF <- rbind(gageDF_02, gageDF_10, gageDF_50, gageDF_20)
     gageDF <- gageDF %>%
         #dplyr::mutate(month = lubridate::month(date)) %>%
         dplyr::group_by(site_no, prob)%>% #), month) %>%
@@ -646,13 +757,9 @@ buildCONUSnetwork <- function(huc4, BHGmodel){
     
     temp_12 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM12', quiet=TRUE) %>%
         dplyr::select(c('NHDPlusID', 'TempMM12'))
-    
-    # #duplicate 12 times and add month vairable
-    # network <- purrr::map(seq_len(12),~network) %>% 
-    #     dplyr::bind_rows(.id="prob")
 
     network <- network %>%
-        dplyr::mutate(prob = purrr::map(.x = NHDPlusID, ~c(0.02, 0.10, 0.50))) %>%
+        dplyr::mutate(prob = purrr::map(.x = NHDPlusID, ~c(0.02, 0.10, 0.20, 0.50))) %>%
         tidyr::unnest(prob)
 
     network <- network %>%
@@ -749,10 +856,6 @@ trainModelEval_V <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
         return(list('summary'=fit_fin,
             'model_fin'=extract_workflow(fit_fin)))
     }
-
-
-    # library(doParallel)
-    # registerDoParallel(cores=detectCores()-2)
 
     result <- plyr::llply(folds_out$splits, nestedWrapper, .parallel=FALSE)
     return(result)
@@ -877,9 +980,6 @@ trainModelEval_Qf <- function(gageForModel_combined, nInnerFolds, nOuterFolds, n
             'model_fin'=extract_workflow(fit_fin)))
     }
 
-    # library(doParallel)
-    # registerDoParallel(cores=detectCores()-2)
-
     result <- plyr::llply(folds_out$splits, nestedWrapper, .parallel=FALSE)
     return(result)
 }
@@ -1003,9 +1103,6 @@ trainModelEval_Q <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
             'model_fin'=extract_workflow(fit_fin)))
     }
 
-    # library(doParallel)
-    # registerDoParallel(cores=detectCores()-2)
-
     result <- plyr::llply(folds_out$splits, nestedWrapper, .parallel=FALSE)
     return(result)
 }
@@ -1097,52 +1194,17 @@ predictBasin <- function(huc4, conusDF, model_Qf, model_V, model_Q){
     forPredict_fin <- forPredict %>%
         dplyr::select(c('NHDPlusID','prob', 'log10V_m3', 'log10Qexc_m3dy', 'log10Q_m3dy'))
 
-    #settling velocity constants
-    C_1 <- 18 #for natural channels
-    C_2 <- 1
-    g <- 9.8 #m/s^2
-    R <- 1.65 #quartz submerged specific gravity (2.65-1) 
-    v <- 1e-6 #kg/m/s kinematic viscosity at 20c
-
     conusDF <- conusDF %>%
         dplyr::left_join(forPredict_fin, by=c('NHDPlusID', 'prob')) %>%
         dplyr::mutate(log10tau_hr = (log10V_m3 - log10Qexc_m3dy) + log10(24), #no channel or bankfull excess, just what's in the fp
                     log10tau_channel_hr = log10(Wb_m*Hb_m*LengthKM*1000) - log10(Qb_cms*86400) + log10(24)) %>% #no bankfull excess, just the channel
-        dplyr::mutate(D_m_sand = 0.354 * 0.001,
-                    D_m_silt = 0.016 * 0.001,
-                    D_m_clay = 0.002 * 0.001) %>% #mm to m
-        dplyr::mutate(settling_sand_m_s = (R*g*D_m_sand^2)/((C_1*v)+sqrt(0.75*C_2*R*g*D_m_sand^3)),
-                    settling_silt_m_s = (R*g*D_m_silt^2)/((C_1*v)+sqrt(0.75*C_2*R*g*D_m_silt^3)),
-                    settling_clay_m_s = (R*g*D_m_clay^2)/((C_1*v)+sqrt(0.75*C_2*R*g*D_m_clay^3))) %>% #Eq. 4 https://doi.org/10.1306/051204740933
-        dplyr::mutate(hydraulic_load_m_s = (LengthKM*1000)/(60*60*10^log10tau_hr)) %>% #unlimited supply, once 100% of particles would settle, leave it at 100%
-        dplyr::select(c('huc4', 'NHDPlusID', 'LengthKM', 'StreamCalc', 'AreaSqKm', 'TotDASqKm', 'prob', 'log10V_m3', 'log10Qexc_m3dy', 'log10Q_m3dy', 'log10tau_hr', 'log10tau_channel_hr', 'settling_sand_m_s', 'settling_silt_m_s', 'settling_clay_m_s', 'hydraulic_load_m_s', 'Shape'))
+        dplyr::select(c('huc4', 'NHDPlusID', 'LengthKM', 'StreamCalc', 'AreaSqKm', 'TotDASqKm', 'prob', 'log10V_m3', 'log10Qexc_m3dy', 'log10Q_m3dy', 'log10tau_hr', 'log10tau_channel_hr', 'Shape'))
 
     return(conusDF)
 }
 
 
 
-
-
-summarizeBasin <- function(huc4, basinPredictions){
-        if(nrow(basinPredictions)==0){
-        return(data.frame())
-    }
-
-    out <- basinPredictions %>%
-        sf::st_drop_geometry() %>%
-        dplyr::group_by(prob) %>%
-        dplyr::summarize(
-                    trap_eff_sand=100*(sum(settling_sand_m_s, na.rm=T)/sum(hydraulic_load_m_s, na.rm=T)),
-                    trap_eff_silt=100*(sum(settling_silt_m_s, na.rm=T)/sum(hydraulic_load_m_s, na.rm=T)),
-                    trap_eff_clay=100*(sum(settling_clay_m_s, na.rm=T)/sum(hydraulic_load_m_s, na.rm=T)),
-                    perc_fp_grains = sum(10^(log10Qexc_m3dy), na.rm=T)/sum(10^(log10Q_m3dy), na.rm=T),
-                    trap_eff_totalload = sum(c(trap_eff_sand*0.50, (trap_eff_silt+trap_eff_clay)*0.50)) * perc_fp_grains,
-                    tau_hr_km = sum(10^log10tau_hr, na.rm=T) / sum(LengthKM, na.rm=T)) %>%
-        dplyr::mutate(huc4 = huc4)
-
-    return(out)
-}
 
 
 
@@ -1165,51 +1227,55 @@ summarizeBasinSO <- function(huc4, basinPredictions){
 
 
 
-# deployModel <- function(conusDF, model_Q, model_V){#, monthID){
-#     sf::sf_use_s2(FALSE)
 
-#     library(tidymodels)
+summarizeBasin <- function(huc4, basinPredictions){
+    if(nrow(basinPredictions)==0){
+        return(data.frame())
+    }
 
-#     forPredict <- conusDF %>%
-#         sf::st_drop_geometry()# %>%
-#         # dplyr::mutate(month = as.numeric(month)) %>%
-#         # dplyr::filter(month == monthID)
+    out <- basinPredictions %>%
+        sf::st_drop_geometry() %>%
+        dplyr::group_by(prob) %>%
+        dplyr::summarize(
+                    median_tau_channel_hr_km = median(10^(log10tau_channel_hr)/LengthKM, na.rm=T),
+                    median_tau_hr_km = median(10^(log10tau_hr)/LengthKM, na.rm=T)) %>%
+        dplyr::mutate(huc4 = huc4)
+    
+    out_diff <- out %>%
+        dplyr::summarize(perc_diff = max(median_tau_hr_km)-(min(median_tau_hr_km)))
 
-#     nhdIDs <- forPredict$NHDPlusID
+    return(list('out'=out,
+                'out_diff'=out_diff))
+}
 
-#     forPredict <- forPredict %>%
-#         dplyr::select(!c('huc4', 'GageID', 'NHDPlusID', 'Wb_m', 'Hb_m', 'Qb_cms',))
 
-#     #predict floodplain terms
-#     forPredict$log10V_m3 <- predict(model_V, forPredict)$.pred
-#     forPredict$log10Qexc_m3dy <- predict(model_Q, forPredict)$.pred
-#     forPredict$NHDPlusID <- nhdIDs
 
-#     forPredict_fin <- forPredict %>%
-#         dplyr::select(c('NHDPlusID', 'log10V_m3', 'log10Qexc_m3dy'))
 
-#     #settling velocity constants
-#     C_1 <- 18 #for natural channels
-#     C_2 <- 1
-#     g <- 9.8 #m/s^2
-#     R <- 1.65 #quartz submerged specific gravity (2.65-1) 
-#     v <- 1e-6 #kg/m/s kinematic viscosity at 20c
-#     D <- 0.063 #mm silts and clays
 
-#     conusDF <- conusDF %>%
-#         dplyr::left_join(forPredict_fin, by='NHDPlusID') %>%
-#         dplyr::mutate(log10tau_hr = (log10V_m3 - log10Qexc_m3dy) + log10(24), #no channel or bankfull excess, just what's in the fp
-#                     log10tau_channel_hr = log10(Wb_m*Hb_m*LengthKM*1000) - log10(Qb_cms*86400) + log10(24), #no bankfull excess, just the channel
-#                     percent_fp = log10V_m3 - log10((Wb_m*Hb_m*LengthKM*1000)+10^(log10V_m3))) %>%
-#         dplyr::mutate(D_mm = 0.063) %>% #silts and clays
-#         dplyr::mutate(D_m = D_mm * 0.001) %>% #mm to m
-#         dplyr::mutate(settling_u_m_s = (R*g*D_m^2)/((C_1*v)+sqrt(0.75*C_2*R*g*D_m^3))) %>% #Eq. 4 https://doi.org/10.1306/051204740933
-#         dplyr::mutate(trap_eff = 100*(settling_u_m_s / ((LengthKM*1000)/(60*60*10^log10tau_hr)))) %>%
-#         dplyr::mutate(trap_eff = ifelse(trap_eff > 100, 100, trap_eff)) %>% #unlimited supply, once 100% of particles would settle, leave it at 100%
-#         dplyr::select(c('huc4', 'NHDPlusID', 'GageID', 'StreamCalc', 'AreaSqKm', 'TotDASqKm', 'log10V_m3', 'log10Qexc_m3dy', 'log10tau_hr', 'log10tau_channel_hr', 'D_mm', 'trap_eff', 'Shape'))
+makeMapBasin <- function(basinPredictions, chosen_prob){
+    if(nrow(basinPredictions)==0){
+        return(data.frame())
+    }
 
-#     return(conusDF)
-# }
+    library(sf)
+
+    #floodplain
+	basinPredictions <- basinPredictions %>%
+        dplyr::filter(prob == chosen_prob) %>%
+        dplyr::mutate(tau_col = dplyr::case_when(
+            log10(10^(log10tau_hr)/LengthKM) <= -0.5 ~ '-0.5'
+            ,log10(10^(log10tau_hr)/LengthKM) <= 0 ~ '0'
+            ,log10(10^(log10tau_hr)/LengthKM) <= 0.5 ~ '0.5'
+            ,log10(10^(log10tau_hr)/LengthKM) <= 1 ~ '1'
+            ,TRUE ~ '1+'
+        ))
+
+
+    basinPredictions$tau_col <- factor(basinPredictions$tau_col, levels = c('-0.5', '0', '0.5', '1', '1+'))
+
+    return(basinPredictions)
+}
+
 
 
 
@@ -1258,11 +1324,6 @@ collectValReaches <- function(huc4id){
         dplyr::left_join(network_gages, by='NHDPlusID') %>%
         dplyr::filter(is.na(GageID) == 0)
 
-    #check for basins with no usgs models
-    if(nrow(unit_catchments)==0){
-        return(data.frame())
-    }
-
     return(unit_catchments$NHDPlusID)
 }
 
@@ -1273,10 +1334,8 @@ collectValReaches <- function(huc4id){
 wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
     huc2 <- substr(huc4id,1, 2)
 
-   # dem <- terra::rast(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/elev_cm.tif')) #[cm]
-
     volVal <- volVal %>%
-        dplyr::filter(huc4 %in% huc4id) #dummy for now to get it to run
+        dplyr::filter(huc4 %in% huc4id)
 
     if(nrow(volVal) == 0){
         return(data.frame())
@@ -1293,19 +1352,14 @@ wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
 
     #load Indiana fixed basins
     indiana <- readr::read_csv('data/indiana.csv')
-    if(huc4 %in% indiana$huc4){
-        network <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/indiana/indiana_fixed_',huc4,'.shp'),quiet = TRUE) %>%
+    if(huc4id %in% indiana$huc4){
+        network <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/indiana/indiana_fixed_',huc4id,'.shp'),quiet = TRUE) %>%
             dplyr::select(!path) %>%
             sf::st_zm() %>%
-            dplyr::left_join(network_VAA, by='NHDPlusID') %>%
             dplyr::left_join(network_gages, by='NHDPlusID') %>%
-            dplyr::mutate(WBArea_Permanent_Identifier = WBArea_Per)
+            dplyr::filter(NHDPlusID %in% reaches_val)
 
         sf::st_geometry(network) <- "Shape"
-
-        network <- network %>%
-            dplyr::select(c('NHDPlusID', 'WBArea_Permanent_Identifier', 'GageID','StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope', 'Shape'))
-
     }
 
     if(nrow(network) == 0){
@@ -1385,30 +1439,6 @@ wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
 
 
 
-# combineTau <- function(gageTau){
-#     out <- dplyr::bind_rows(gageTau)
-#     return(out)
-# }
-
-
-
-
-
-# prepForTauValidation <- function(gageTau_val, gageTau){
-#     df_obs <- dplyr::bind_rows(gageTau_val)
-#     df_model <- gageTau
-
-#     colnames(df_obs) <- c('Qprob', 'site_no', 'avg_event_Q_flood_cms_OBS','avg_event_exc_dys_OBS', 'avg_ann_exc_dys_OBS', 'avg_ann_n_events_OBS')
-
-#     #join bankful dataset with gages
-#     df <- df_obs %>%
-#         dplyr::inner_join(df_model, by=c('site_no', 'Qprob'))
-
-#     return(df)
-# }
-
-
-
 modelsJacknifeBHG <- function(){
     dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
         dplyr::select(c('USGS Station No.','Physiographic Division', '...9', '...11','...13','...17')) #some necessary manual munging for colnames from dataset
@@ -1438,11 +1468,11 @@ modelsJacknifeBHG <- function(){
                         Qb_log10 = log10(Qb_cms),
                         DA_log10 = log10(DA_km2),
                         Ab_log10 = log10(Ab_m2)) %>%
-        dplyr::group_by(DIVISION) %>%
-        dplyr::do(model_Wb = lm(Wb_log10~DA_log10, data=.),
+            dplyr::group_by(DIVISION) %>%
+            dplyr::do(model_Wb = lm(Wb_log10~DA_log10, data=.),
                 model_Qb = lm(Qb_log10~DA_log10, data=.), #fit models by physiographic regions
                 model_Ab = lm(Ab_log10~DA_log10, data=.)) %>%
-        dplyr::summarise(a_Wb = model_Wb$coef[1], #model intercept
+            dplyr::summarise(a_Wb = model_Wb$coef[1], #model intercept
                         b_Wb = model_Wb$coef[2], #model exponent
                         r2_Wb = summary(model_Wb)$r.squared, #model performance
                         mean_residual_Wb = mean(10^(model_Wb$residuals), na.rm=T),
@@ -1663,7 +1693,7 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG){
             return(data.frame())
         }
 
-        colnames(events_obs) <- c('flood_id', 'flag','n_yrs','Qexc_m3dy', 'Htf_m')
+        colnames(events_obs) <- c('flood_id', 'flag','n_yrs','Qexc_m3dy', 'Q_m3dy', 'Htf_m')
 
         out <- rbind(events, events_obs)
         out$site_no <- probs[1,]$site_no
@@ -1784,15 +1814,6 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
     # convert to date (workaround to handle known date class bug with midnight- https://github.com/tidyverse/lubridate/issues/1124)
     gagedata$date <- lubridate::ymd_hms(format(as.POSIXct(gagedata$dateTime), format = "%Y-%m-%d %T %Z"))
 
-    # gagedata_og <- gagedata
-
-    #downsample to hourly (just to be consistent and reduce volume of data)
-    # gagedata <- gagedata_og %>%
-    #   dplyr::mutate(date_hr = lubridate::ymd_h(paste0(lubridate::year(date), '-', lubridate::month(date),'-',lubridate::day(date), '-', lubridate::hour(date)))) %>%
-    #   dplyr::group_by(date_hr) %>%
-    #   dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
-    #                   Q_cms = mean(Q_cms, na.rm=T))
-
     #get max annual floods for calculating the FEMA 100yr AEP
     gagedata_aep <- gagedata %>%
         dplyr::mutate(year = lubridate::year(date)) %>%
@@ -1831,11 +1852,6 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
 
     #add flag if gagedata is outside of the rating table
     gagedata$ratingflag <- ifelse(gagedata$Q_cms > max(ratingTable$Q_cms) | gagedata$Q_cms < min(ratingTable$Q_cms), 1, 0)
-
-    # #add fema 100 yr aep
-    # fema100yrflood_cms <- gagedata_aep[which.min(abs(gagedata_aep$exceed_prob - 0.01)),]$Q_cms
-
-    # gagedata$fema100yrflood_cms <- fema100yrflood_cms
 
     return(gagedata)
 }
@@ -2028,219 +2044,3 @@ buildDepthAHG <- function(gage, minADCPMeas){
 
     return(site_info)
 }
-
-
-
-
-
-
-# wrangleDOC <- function(allGages_combined){
-#     df <- readr::read_csv('data/raymond_saiers_2010.csv') %>%
-#         dplyr::select(c('site_no', 'mean_DOC_mgL'))
-#     df$site_no <- paste0('0',as.character(df$site_no)) #add the leading zeros dropped from the data but needed for Northeastern US gages
-
-#     df <- df %>%
-#         dplyr::filter(site_no %in% allGages_combined$GageID)
-
-#     return(df)
-# }
-
-
-
-
-
-# trainModelInit <- function(gageForModel_combined, numFolds, numRepeats){
-#     library(tidymodels)
-#     library(parsnip)
-#     library(bonsai)
-
-#     data_fin <- gageForModel_combined %>%
-#         dplyr::mutate(tau_dy = log10(tau_dy)) %>%
-#         dplyr::select(!Qexc_m3dy) %>%
-#         tidyr::drop_na()
-
-#     set.seed(76)
-
-#     folds <- vfold_cv(data_fin, repeats=numRepeats, v=numFolds)
-
-#     #prescribe models
-#     rf_model <- rand_forest() %>%
-#         set_engine("ranger") %>%
-#         set_mode("regression")
-
-#     lightgbmboost_model <- boost_tree() %>% #https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html and https://datascience.stackexchange.com/questions/74488/tuning-parameters-for-gradient-boosting-xgboost
-#         set_engine('lightgbm') %>% #added to bonsai package kind of ad hoc for some reason (con. it's argubaly the most important parameter...)
-#         set_mode("regression")
-
-#     #prescribe preprocessing recipes
-#     recipe_full <- recipe(tau_dy ~ ., data=data_fin) %>%
-#             step_cut(StreamCalc, breaks=seq(1,max(data_fin$StreamCalc),1)) %>% #on hot encoding of stream order
-#             step_dummy(StreamCalc) %>%
-#             step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1 (necessary for some models, can't hurt for others)
-
-#     #make workflow set for all model and preprocessing recipe combinations
-#     all_workflows <- workflow_set(
-#         preproc = list(full = recipe_full),
-#         models = list(boost_lightgbm = lightgbmboost_model, rf = rf_model)
-#     )
-
-#     #fit models
-#     set.seed(83)
-#     all_workflows <- all_workflows %>%
-#         workflow_map(seed=143, fn='fit_resamples', resamples = folds,  verbose=TRUE) #fit_resamples doesn't do any tuning, which is what we want
-
-#     ranked <- rank_results(all_workflows, rank_metric='rsq')
-
-#     return(ranked)
-# }
-
-
-
-
-# hortonScaling <- function(basinAnalysis, huc4){
-
-#   scaledBasin <- basinAnalysis %>%
-#     sf::st_drop_geometry() %>%
-#     dplyr::group_by(StreamCalc) %>% 
-#     dplyr::summarise(Af_by_order = sum(A_q1_m2 - (Wb_m*LengthKM*1000), na.rm=T),
-#                     A_by_order = sum(A_q1_m2, na.rm=T),
-#                     Vf_by_order = sum(V_q1_m3 - (Wb_m*LengthKM*1000*Htf_q1_m), na.rm=T),
-#                     V_by_order = sum(V_q1_m3, na.rm=T),
-#                     frac = round((sum(Wb_m > 10, na.rm=T)/n()),2),
-#                     lengthKM_by_order = sum(LengthKM, na.rm=T)) %>%
-#     dplyr::mutate(frac2 = ifelse(frac < 1, NA, frac))
-
-#   #fit Horton equations for floodplain water (only using the orders with 100% model coverage (i.e. Wb > 10m))
-#   area_model <- lm(log(Af_by_order*frac2)~log(StreamCalc), data=scaledBasin)
-#   vol_model <- lm(log(Vf_by_order*frac2)~log(StreamCalc), data=scaledBasin)
-#   vol_model_all <- lm(log(V_by_order*frac2)~log(StreamCalc), data=scaledBasin)
-
-#   #also fit length
-#   length_model <- lm(log(lengthKM_by_order)~log(StreamCalc), data=scaledBasin)
-
-#   #use horton eqs to calculate inundated areas and volumes for orders with frac < 100%
-#   scaledBasin$Af_by_order_km2_fin <- exp(predict(area_model, scaledBasin)) * 1e-6 #[m2 to km2]
-#   scaledBasin$Vf_by_order_km3_fin <- exp(predict(vol_model, scaledBasin)) * 1e-9 #[m3 to km3]
-#   scaledBasin$V_by_order_km3_fin <- exp(predict(vol_model_all, scaledBasin)) * 1e-9 #[m3 to km3]
-
-#   #prep output
-#   scaledBasin <- scaledBasin %>%
-#     dplyr::mutate('huc4'=huc4,
-#                 'Hf_avg_by_order_cm_fin'=(Vf_by_order_km3_fin / Af_by_order_km2_fin / (Af_by_order_km2_fin*1e6/100))*100000, #100m2 cell size
-#                 'area_model_r2'=summary(area_model)$r.squared,
-#                 'vol_model_r2'=summary(vol_model)$r.squared,
-#                 'vol_all_model_r2'=summary(vol_model_all)$r.squared) %>%
-#     dplyr::select(c('huc4', 'StreamCalc', 'frac', 'area_model_r2', 'vol_model_r2', 'vol_all_model_r2', 'Af_by_order_km2_fin', 'Vf_by_order_km3_fin', 'V_by_order_km3_fin', 'Hf_avg_by_order_cm_fin'))
-
-#   return(scaledBasin)
-# }
-
-
-
-
-# regulateFlooding <- function(basinAnalysis, barriers, area_thresh_perc, huc4id, snapping_thresh){
-#   huc2 <- substr(huc4id, 1, 2)
-
-#   network_VAA <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusFlowlineVAA', quiet=TRUE) %>%
-#     dplyr::select(c('NHDPlusID', 'TotDASqKm', 'ToNode', 'FromNode'))
-
-#   basins <- basinAnalysis
-
-#   basins_all <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'),layer = 'NHDFlowline',quiet = TRUE) %>%
-#     sf::st_zm() %>%
-#     dplyr::left_join(network_VAA, by='NHDPlusID')
-
-#   basins <- basins %>%
-#     dplyr::select(!'TotDASqKm') %>%
-#     dplyr::left_join(network_VAA, by='NHDPlusID')
-
-#   huc_shp <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU4.shp')) %>%
-#      dplyr::filter(huc4 == huc4id)
-
-#   #join Global Dam Watch Database to nhd
-#   barriers <- barriers %>% #sf::st_read('data/path_to_data/CONUS_sediment_data/GDW_barriers_v1_0.shp') %>%
-#     sf::st_transform(crs=sf::st_crs(basins_all)) %>%
-#     sf::st_crop(huc_shp)
-
-#   buffered_barriers <- barriers %>%
-#     sf::st_buffer(snapping_thresh)
-  
-#   barriers_init <- buffered_barriers %>%
-#     sf::st_join(basins_all) %>%
-#     sf::st_drop_geometry() %>%
-#     dplyr::filter(abs(RESV_CATCH_SKM-TotDASqKm)/RESV_CATCH_SKM <= area_thresh_perc & is.na(RESV_CATCH_SKM)==0) %>%
-#     dplyr::select(c('HYRIV_ID', 'NHDPlusID', 'RESV_CATCH_SKM'))
-  
-#   for_dist <- barriers %>%
-#     dplyr::left_join(barriers_init, by='HYRIV_ID') %>%
-#     dplyr::filter(is.na(NHDPlusID)==0)
-
-#   #loop through dams and find the nhd reach closest to the barrier (after filtering for only reaches within 1km and within 5% drainage area agreeement)
-#   for_dist2 <- for_dist %>%
-#     dplyr::group_by(HYRIV_ID) %>%
-#     dplyr::summarise(n=n())
-  
-#   out <- NA
-#   for(i in for_dist2$HYRIV_ID){
-#       ids <- for_dist[for_dist$HYRIV_ID == i,]$NHDPlusID
-#       check_reaches <- basins_all[basins_all$NHDPlusID %in% ids,]
-
-#       nearest_reach <- check_reaches[sf::st_nearest_feature(for_dist2[for_dist2$HYRIV_ID == i,], check_reaches),]
-#       out <- c(out, nearest_reach$NHDPlusID)
-#   }
-
-#   barriers_fin <- barriers_init %>%
-#     dplyr::filter(NHDPlusID %in% out) %>%
-#     dplyr::select(c('NHDPlusID', 'RESV_CATCH_SKM'))
-    
-    
-#     # dplyr::group_by(NHDPlusID) %>% 
-#     # #dplyr::slice_min(abs(RESV_CATCH_SKM-TotDASqKm)/RESV_CATCH_SKM) %>%
-#     # dplyr::ungroup() %>%
-#     # dplyr::select(c('NHDPlusID', 'RESV_CATCH_SKM'))
-
-#   #runs asynchrounsouly for reach i using doparallel
-#   effContrbWrapper <- function(basin, basins_all){
-#     #crawl upstream to find reservoir drainage areas
-#     ids_vec <- basin$FromNode
-#     lookup <- data.frame()
-#     while(length(ids_vec)> 0){
-#       up_basins <- basins_all %>%
-#         sf::st_drop_geometry() %>%
-#         dplyr::filter(ToNode %in% ids_vec) %>%
-#         dplyr::left_join(barriers_fin, by='NHDPlusID') %>%
-#         dplyr::group_by(NHDPlusID) %>% #can have multiple dams on a reach, so just keep the most downstream one (see next line)
-#         dplyr::slice_max(TotDASqKm) %>%
-#         dplyr::ungroup() %>%
-#         dplyr::mutate(RESV_CATCH_SKM = ifelse(RESV_CATCH_SKM > 0, TotDASqKm, NA)) #for consistency, use the nhd drainage area
-
-#       #if a reservoir is found, store that catchment area away and stop crawling that part of the network
-#       if(sum(up_basins$RESV_CATCH_SKM, na.rm=T) > 0){
-#           temp <- up_basins %>%
-#             dplyr::filter(RESV_CATCH_SKM > 0 & is.na(RESV_CATCH_SKM)==0) %>%
-#             dplyr::select(c('NHDPlusID', 'FromNode', 'RESV_CATCH_SKM'))
-#           lookup <- rbind(lookup, temp)
-
-#           #remove that basin from the list of crawling basins
-#           up_basins <- up_basins %>%
-#             dplyr::filter(!(NHDPlusID %in% temp$NHDPlusID))
-#         }
-#       ids_vec <- up_basins$FromNode
-#     }
-#     lookup <- lookup[!duplicated(lookup),]
-#   print(lookup)
-#     basin$regulatedDA_skm <- sum(lookup$RESV_CATCH_SKM, na.rm=T)
-
-#     return(basin)
-#   }
-
-#     library(plyr)
-#     library(doParallel)
-#     registerDoParallel(cores=detectCores()-2)
-
-#     basin_list <- setNames(split(basins, seq(nrow(basins))), rownames(basins))
-#     result <- llply(basin_list, effContrbWrapper, basins_all, .parallel=TRUE)
-#     basins_fin <- dplyr::bind_rows(result)
-
-#   return(basins_fin)
-# }
