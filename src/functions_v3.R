@@ -2044,3 +2044,11 @@ buildDepthAHG <- function(gage, minADCPMeas){
 
     return(site_info)
 }
+
+
+
+tallyReaches <- function(basinPredictions){
+    out <- nrow(basinPredictions)/4
+
+    return(out)
+}

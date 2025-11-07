@@ -93,6 +93,7 @@ gageAnalysis <- tar_map(
   tar_target(basinPredictions, predictBasin(huc4, conusForModel, model_Qf, model_V, model_Q)), #run ML models for basin reaches
   tar_target(basinSummarySO, summarizeBasinSO(huc4, basinPredictions)), #summarize to basin scale by streamorder
   tar_target(basinSummary, summarizeBasin(huc4, basinPredictions)), #summarize to basin scale
+  tar_target(nReaches, tallyReaches(basinPredictions)),#tally up modeled reaches for manuscript
 
   ## MAPPING
   tar_target(gage_df, makeGageDF(gage, gageForModel, huc4)),
@@ -128,6 +129,7 @@ list(
   tar_combine(gages_df_combined, gageAnalysis$gage_df, command=dplyr::bind_rows(!!!.x)), #gages for map
   tar_target(gagesDF, cleanUpGages(gages_df_combined, modelDF)), #gages for map
   tar_combine(allGages_combined, gageAnalysis$allGages, command = dplyr::bind_rows(!!!.x)),
+  tar_combine(nReaches_combined, gageAnalysis$nReaches, command = vctrs::vec_c(!!!.x)),
 
   ## TRAIN ML MODELS
   tar_target(model_V_eval, trainModelEval_V(modelDF, nInnerFolds, nOuterFolds, numGrid, numRepeats)),
@@ -174,5 +176,6 @@ list(
   ## EXTENDED FIGURES
   tar_target(fig_validationCalculation, makeCalculationValFig(gageVolume_val_combined, gageQexc_val)),
   tar_target(fig_gageMap, makeGageMap(gagesDF)),
-  tar_target(fig_totalQVal, makeMLQFig(model_Q_eval, modelDF))
+  tar_target(fig_totalQVal, makeMLQFig(model_Q_eval, modelDF)),
+  tar_target(fig_huc4s, makeHuc4Map())
 )
