@@ -1,7 +1,7 @@
 # _targets.R file
 # Craig Brinkerhoff
 # Fall 2025
-# Master pipeline for river-floodplain exchange model
+# Master pipeline for floodwater residence time study
 
 #necessary global packages for pipelining.
 library(targets)
@@ -148,7 +148,7 @@ list(
   tar_combine(combined_basinSummary, gageAnalysis$basinSummary, command = dplyr::bind_rows(!!!.x)),
 
   ## RUN CONNECTICUT DOM EXPERIMENT
-  tar_target(CT_dom, runDOMExperiment(basinPredictions_0108)),
+  tar_target(CT_doc, runDOCExperiment(basinPredictions_0108)),
 
   #QEXC COMPARISON VIA JACKNIFE REGRESSION
   tar_target(BHGmodel_jacknife, modelsJacknifeBHG()),
@@ -171,7 +171,7 @@ list(
   tar_target(fig_validationML, makeMLValFig(model_Qf_eval, model_V_eval, modelDF)),
   tar_target(fig_reachTauMap, makeReachMap(basinsList_02, basinsList_10, basinsList_20, basinsList_50)),
   tar_target(fig_streamorder, makeReachBoxplotsFig(combined_basinSummarySO)),
-  tar_target(fig_dom, domExperimentPlot(CT_dom)),
+  tar_target(fig_doc, docExperimentPlot(CT_doc)),
 
   ## EXTENDED FIGURES
   tar_target(fig_validationCalculation, makeCalculationValFig(gageVolume_val_combined, gageQexc_val)),

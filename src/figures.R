@@ -8,7 +8,7 @@
 
 
 
-domExperimentPlot <- function(out){
+docExperimentPlot <- function(out){
     library(ggplot2)
     theme_set(theme_classic())
     plot <- ggplot(out, aes(x=StreamCalc, y=value_fin, group=key_fin, color=key_fin))+
@@ -28,10 +28,11 @@ domExperimentPlot <- function(out){
         guides(color='none')+
         facet_wrap(vars(prob), nrow=2, scales = "free") +
         theme(strip.background = element_blank(),
-            plot.title = element_text(hjust = 0.5, size=18)) +
+            plot.title = element_text(hjust = 0.5, size=18),
+            panel.border=element_rect(colour="black",size=1, fill=NA)) +
         scale_y_continuous(limits=c(0,4.5))
 
-    ggsave('cache/DOMremoval.png', plot)
+    ggsave('cache/DOCremoval.png', plot)
 }
 
 
@@ -277,7 +278,8 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
             theme(legend.position='bottom')+
             theme(legend.title = element_text(size = 28),
                 legend.text = element_text(size = 24),
-                plot.title = element_text(hjust = 0.5, size=30))+
+                plot.title = element_text(hjust = 0.5, size=30),
+                panel.border=element_rect(colour="black",size=1, fill=NA))+
             guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 8), title.position = "top", title.hjust = 0.5))
 
         map_10 <- ggplot() +
@@ -497,7 +499,8 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
             theme(legend.position='bottom')+
             theme(legend.title = element_text(size = 28),
                 legend.text = element_text(size = 24),
-                plot.title = element_text(hjust = 0.5, size=30))+
+                plot.title = element_text(hjust = 0.5, size=30),
+                panel.border=element_rect(colour="black",size=1, fill=NA))+
             guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 8), title.position = "top", title.hjust = 0.5))
 
         map_50 <- ggplot() +
@@ -717,7 +720,8 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
             theme(legend.position='bottom')+
             theme(legend.title = element_text(size = 28),
                 legend.text = element_text(size = 24),
-                plot.title = element_text(hjust = 0.5, size=30))+
+                plot.title = element_text(hjust = 0.5, size=30),
+                panel.border=element_rect(colour="black",size=1, fill=NA))+
             guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 8), title.position = "top", title.hjust = 0.5))
 
 
@@ -938,7 +942,8 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
             theme(legend.position='bottom')+
             theme(legend.title = element_text(size = 28),
                 legend.text = element_text(size = 24),
-                plot.title = element_text(hjust = 0.5, size=30))+
+                plot.title = element_text(hjust = 0.5, size=30),
+                panel.border=element_rect(colour="black",size=1, fill=NA))+
             guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 8), title.position = "top", title.hjust = 0.5))
     
     layout <- "
@@ -986,10 +991,12 @@ makeReachBoxplotsFig <- function(combined_basinSummarySO){
             strip.text.x = element_text(size = 24),
             strip.text.y = element_text(size = 24))+
         facet_wrap(vars(prob_lab), nrow=2, scales = "free") +
-        theme(strip.background = element_blank()) +
+        theme(strip.background = element_blank(),
+            panel.background=element_blank(),
+            panel.border=element_rect(colour="black",size=1, fill=NA)) +
         scale_y_log10(guide = "axis_logticks",  labels = scales::label_log(base=10), limits=c(10^-2, 10^1.5), breaks=c(10^-2, 10^-1, 10^0, 10^1))
 
-    ggsave('cache/streamOrderFig.png', boxplot, width=10, height=10)
+    ggsave('cache/streamOrderFig.png', boxplot, width=11, height=10)
 }
 
 
@@ -1045,7 +1052,7 @@ makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){
         labs(tag='A')+
         theme(axis.title = element_text(size=20, face='bold'))+
         theme(legend.position=c(0.8,0.2),
-            panel.border = element_rect(colour = "black", fill = NA),
+            panel.border=element_rect(colour="black",size=1, fill=NA),
             axis.line = element_blank())+
         theme(axis.text = element_text(family = "Futura-Medium", size=18),
             legend.text = element_text(family = "Futura-Medium", size = 16),
@@ -1071,7 +1078,7 @@ makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){
         labs(tag='B')+
         theme(axis.title = element_text(size=20, face='bold'))+
         theme(legend.position='none',
-            panel.border = element_rect(colour = "black", fill = NA),
+            panel.border=element_rect(colour="black",size=1, fill=NA),
             axis.line = element_blank())+
         theme(axis.text = element_text(family = "Futura-Medium", size=18),
             legend.text = element_text(family = "Futura-Medium", size = 18),
@@ -1150,7 +1157,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
             legend.text=element_text(size=22),
             axis.title=element_text(size=24),
             axis.text = element_text(size=22),
-            panel.border = element_rect(colour = "black", fill = NA))
+            panel.border=element_rect(colour="black",size=1, fill=NA))
 
     full_predictions_V$prob <- factor(full_predictions_V$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     r2_V <- round(summary(lm(.pred~V_m3, data=full_predictions_V))$r.squared,2)
@@ -1170,7 +1177,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
             legend.text=element_text(size=22),
             axis.title=element_text(size=24),
             axis.text = element_text(size=22),
-            panel.border = element_rect(colour = "black", fill = NA))
+            panel.border=element_rect(colour="black",size=1, fill=NA))
 
     #combine
     full_predictions <- full_predictions_Q %>%
@@ -1198,7 +1205,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
             legend.text=element_text(size=22),
             axis.title=element_text(size=24),
             axis.text = element_text(size=22),
-            panel.border = element_rect(colour = "black", fill = NA))
+            panel.border=element_rect(colour="black",size=1, fill=NA))
 
     layout <- "
         ABC
@@ -1263,7 +1270,7 @@ makeMLQFig <- function(trainedModel_Q, modelDF){
             legend.text=element_text(size=15),
             axis.title=element_text(face='bold', size=18),
             axis.text = element_text(size=15),
-            panel.border = element_rect(colour = "black", fill = NA))
+            panel.border=element_rect(colour="black",size=1, fill=NA))
 
     ggsave('cache/validationTotalQML.png', scatter_Q, height=7, width=7)
 

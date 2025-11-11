@@ -5,7 +5,7 @@
 
 
 
-runDOMExperiment <- function(df){
+runDOCExperiment <- function(df){
     k_dy <- 0.22 #d^-1 Raymond et al 2016 & Kaplan et al. 2006
 
     #assumes orders 1-3 are headwaters, DA approx lines up with Raymond & Saiers 2010
