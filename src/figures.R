@@ -3,11 +3,13 @@
 ## Fall 2025
 
 
-
-
-
-
-
+#' docExperimentPlot
+#'
+#' Makes figure for CT DOC experiment
+#' 
+#' @param out dataframe of CT DOC experiment
+#'
+#' @return figure written to file
 docExperimentPlot <- function(out){
     library(ggplot2)
     theme_set(theme_classic())
@@ -35,10 +37,16 @@ docExperimentPlot <- function(out){
     ggsave('cache/DOCremoval.png', plot)
 }
 
-
-
-
-
+#' makeReachMap
+#'
+#' Makes figure of CONUS model results
+#' 
+#' @param basinsList_02 list of basin sf mapping objects for 2% flood
+#' @param basinsList_10 list of basin sf mapping objects for 10% flood
+#' @param basinsList_20 list of basin sf mapping objects for 20% flood
+#' @param basinsList_50 list of basin sf mapping objects for 50% flood
+#'
+#' @return figure written to file
 makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList_50){
     library(ggplot2)
     theme_set(theme_classic())
@@ -946,6 +954,32 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
                 panel.border=element_rect(colour="black",size=1, fill=NA))+
             guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 8), title.position = "top", title.hjust = 0.5))
     
+    
+	#BUILD INSET BOX BOUNDING BOX-------------------------------------
+    #inset centering
+    zoom_to <- c(-79.5000, 39.1399)
+
+    #set up zoom bounds
+    zoom_level <- 3
+    lon_span <- 360 / 5^zoom_level
+    lat_span <- 360 / 5^zoom_level
+    lon_bounds_1 <- c(zoom_to[1] - lon_span / 2, zoom_to[1] + lon_span / 2)
+    lat_bounds_1 <- c(zoom_to[2] - lat_span / 2, zoom_to[2] + lat_span / 2)
+
+    #set up inset box
+    df <- data.frame(lon_bounds_1, lat_bounds_1)
+    box_1 <- df %>% 
+        sf::st_as_sf(coords = c("lon_bounds_1", "lat_bounds_1"), crs = 4326) %>% 
+        sf::st_bbox() %>% 
+        sf::st_as_sfc()
+
+    # add inset 1 bounding box to map
+    map_50 <- map_50 +
+        geom_sf(data=box_1,
+                color='#fca311',
+                linewidth=3,
+                alpha=0)
+
     layout <- "
         AB
         CD
@@ -956,16 +990,158 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
             legend.title = element_text(size = 28))
     
     ggsave('cache/reachTauMap.png', combo_plot, width=18, height=12)
+
+
+    #save insets for show scale (assembled later in illustrator)
+
+}
+
+makeReachMapInset <- function(map_0205, map_0206,map_0207,map_0208,map_0502, map_0503, map_0501, map_0505){
+    library(ggplot2)
+	theme_set(theme_classic())
+
+	#BUILD INSET BOUNDING BOXES-------------------------------------
+    #setup centering
+    zoom_to <- c(-79.5000, 39.1399)
+
+	# INSET 1
+    #set up zoom bounds
+    zoom_level <- 3
+    lon_span <- 360 / 5^zoom_level
+    lat_span <- 360 / 5^zoom_level
+    lon_bounds_1 <- c(zoom_to[1] - lon_span / 2, zoom_to[1] + lon_span / 2)
+    lat_bounds_1 <- c(zoom_to[2] - lat_span / 2, zoom_to[2] + lat_span / 2)
+
+    #set up inset box
+    df <- data.frame(lon_bounds_1, lat_bounds_1)
+    box_1 <- df %>% 
+        sf::st_as_sf(coords = c("lon_bounds_1", "lat_bounds_1"), crs = 4326) %>% 
+        sf::st_bbox() %>% 
+        sf::st_as_sfc()
+
+	#INSET 2
+    #set up zoom bounds
+    zoom_level <- 4
+	lon_span <- 360 / 5^zoom_level
+	lat_span <- 360 / 5^zoom_level
+	lon_bounds_2 <- c(zoom_to[1] - lon_span / 2, zoom_to[1] + lon_span / 2)
+	lat_bounds_2 <- c(zoom_to[2] - lat_span / 2, zoom_to[2] + lat_span / 2)
+
+	#set up inset box
+    df <- data.frame(lon_bounds_2, lat_bounds_2)
+	box_2 <- df %>% 
+        sf::st_as_sf(coords = c("lon_bounds_2", "lat_bounds_2"), crs = 4326) %>% 
+        sf::st_bbox() %>% 
+        sf::st_as_sfc()
+
+	#INSET 3
+    #set up zoom bounds
+    zoom_level <- 5
+	lon_span <- 360 / 5^zoom_level
+	lat_span <- 360 / 5^zoom_level
+	lon_bounds_3 <- c(zoom_to[1] - lon_span / 2, zoom_to[1] + lon_span / 2)
+	lat_bounds_3 <- c(zoom_to[2] - lat_span / 2, zoom_to[2] + lat_span / 2)
+
+	#set up inset box
+    df <- data.frame(lon_bounds_3, lat_bounds_3)
+	box_3 <- df %>% 
+        sf::st_as_sf(coords = c("lon_bounds_3", "lat_bounds_3"), crs = 4326) %>% 
+        sf::st_bbox() %>% 
+        sf::st_as_sfc()
+
+	#INSET 4
+    #set up zoom bounds
+    zoom_level <- 6
+	lon_span <- 360 / 5^zoom_level
+	lat_span <- 360 / 5^zoom_level
+	lon_bounds_4 <- c(zoom_to[1] - lon_span / 2, zoom_to[1] + lon_span / 2)
+	lat_bounds_4 <- c(zoom_to[2] - lat_span / 2, zoom_to[2] + lat_span / 2)
+
+	#set up inset box
+    df <- data.frame(lon_bounds_4, lat_bounds_4)
+	box_4 <- df %>% 
+        sf::st_as_sf(coords = c("lon_bounds_4", "lat_bounds_4"), crs = 4326) %>% 
+        sf::st_bbox() %>% 
+        sf::st_as_sfc()  		
+
+    #BUILD INSET MAPS----------------------------------------
+	#build complete inset river network
+    insetNet <- rbind(map_0205, map_0206,map_0207,map_0208,map_0502, map_0503, map_0501, map_0505)
+
+    #plot inset 1
+    insetShp1 <- sf::st_crop(insetNet, xmin=lon_bounds_1[1], xmax=lon_bounds_1[2], ymin=lat_bounds_1[1], ymax=lat_bounds_1[2])
+    inset1 <- ggplot() +
+        geom_sf(data = insetShp1, aes(color = tau_col), linewidth=0.5) +  		
+        geom_sf(data=box_2,
+            color='#fca311',
+            linewidth=3,
+            alpha=0) +
+        scale_color_manual(values=c('#a7bea9', '#84a98c', '#52796f', '#354f52', '#2f3e46'),
+                        name=bquote(bold(tau[flood]~'['*hr^1*km^-1*']')),
+                        labels=c(bquote(10^-0.5), bquote(10^0), bquote(10^0.5), bquote(10^1), bquote('Over'~10^1)),
+                        drop=FALSE)+
+        ggsn::scalebar(data=insetShp1,location='bottomleft', dist = 50, dist_unit = "km",transform = TRUE, model = "WGS84", box.fill=c('white','red'),st.color='white',st.dist=0.05,border.size=0.05) +  
+        xlab('')+
+        ylab('')+
+        coord_sf(datum=NA) +
+        theme(legend.position='none',
+            panel.background = element_rect(fill = "black"))
+
+    #plot inset 2
+    insetShp2 <- sf::st_crop(insetNet, xmin=lon_bounds_2[1], xmax=lon_bounds_2[2], ymin=lat_bounds_2[1], ymax=lat_bounds_2[2])    
+    inset2 <- ggplot() +
+        geom_sf(data = insetShp2, aes(color = tau_col), linewidth=0.5) + 		
+        geom_sf(data=box_3,
+            color='#fca311',
+            linewidth=3,
+            alpha=0) +
+        scale_color_manual(values=c('#a7bea9', '#84a98c', '#52796f', '#354f52', '#2f3e46'),
+                        name=bquote(bold(tau[flood]~'['*hr^1*km^-1*']')),
+                        labels=c(bquote(10^-0.5), bquote(10^0), bquote(10^0.5), bquote(10^1), bquote('Over'~10^1)),
+                        drop=FALSE)+
+        ggsn::scalebar(data=insetShp2,location='bottomleft', dist = 10, dist_unit = "km",transform = TRUE, model = "WGS84", box.fill=c('white','red'),st.color='white',st.dist=0.05,border.size=0.05) +  
+        xlab('')+
+        ylab('')+  		
+        coord_sf(datum=NA) +
+        theme(legend.position='none',
+            panel.background = element_rect(fill = "black"))
+
+    #plot inset 3
+    insetShp3 <- sf::st_crop(insetNet, xmin=lon_bounds_3[1], xmax=lon_bounds_3[2], ymin=lat_bounds_3[1], ymax=lat_bounds_3[2])
+
+    inset3 <- ggplot() +
+    geom_sf(data = insetShp3, aes(color = tau_col), linewidth=0.5) + 		
+        scale_color_manual(values=c('#a7bea9', '#84a98c', '#52796f', '#354f52', '#2f3e46'),
+                        name=bquote(bold(tau[flood]~'['*hr^1*km^-1*']')),
+                        labels=c(bquote(10^-0.5), bquote(10^0), bquote(10^0.5), bquote(10^1), bquote('Over'~10^1)),
+                        drop=FALSE)+
+        ggsn::scalebar(data=insetShp3,location='bottomleft', dist = 2, dist_unit = "km",transform = TRUE, model = "WGS84", box.fill=c('white','red'),st.color='white',st.dist=0.05,border.size=0.05) +
+        xlab('')+
+        ylab('')+
+        coord_sf(datum=NA) +						
+        theme(legend.position='none',
+            panel.background = element_rect(fill = "black"))
+
+    # PLOT DESIGN-----------------------------------------------------------------------
+    design <- "
+    CDE
+    "
+
+    comboPlot <- patchwork::wrap_plots(C=inset3, D=inset2, E=inset1, design=design)
+
+	ggsave(filename="cache/reachTauMap_inset.png",plot=comboPlot,width=20,height=5)
+
+	return('written to file')
 }
 
 
-
-
-
-
-
-
-
+#' makeReachBoxplotsFig
+#'
+#' Makes figure of CONUS model results by stream order
+#' 
+#' @param combined_basinSummarySO basin stream order summary dataframe
+#'
+#' @return figure written to file
 makeReachBoxplotsFig <- function(combined_basinSummarySO){
     library(ggplot2)
     theme_set(theme_classic())
@@ -987,24 +1163,51 @@ makeReachBoxplotsFig <- function(combined_basinSummarySO){
         theme(legend.position='bottom',
             axis.text=element_text(size=20),
             axis.title = element_text(size=22, face='bold'),
-            legend.text=element_text(size=20),
+            legend.text=element_text(size=22),
             strip.text.x = element_text(size = 24),
             strip.text.y = element_text(size = 24))+
         facet_wrap(vars(prob_lab), nrow=2, scales = "free") +
+        labs(tag='A')+
         theme(strip.background = element_blank(),
             panel.background=element_blank(),
-            panel.border=element_rect(colour="black",size=1, fill=NA)) +
+            panel.border=element_rect(colour="black",size=1, fill=NA),
+            plot.tag = element_text(size=26)) +
         scale_y_log10(guide = "axis_logticks",  labels = scales::label_log(base=10), limits=c(10^-2, 10^1.5), breaks=c(10^-2, 10^-1, 10^0, 10^1))
 
-    ggsave('cache/streamOrderFig.png', boxplot, width=11, height=10)
+    boxplot_all <- ggplot(forPlot[forPlot$key == 'median_tau_hr_km',], aes(x=factor(StreamCalc), y=value, fill=prob_lab), color='black')+
+        geom_boxplot() +
+        scale_fill_manual(values=c('#2c2a4a', '#4f518c', '#907ad6', '#dabfff'), name='') +
+        scale_y_log10(guide = "axis_logticks",  labels = scales::label_log(base=10), limits=c(10^-2, 10^1.5), breaks=c(10^-2, 10^-1, 10^0, 10^1))+
+        xlab(bquote(bold(Stream~Order)))+
+        ylab(bquote(bold(tau~'['*hr^1*km^-1*']'))) +
+        labs(tag='B')+
+        theme(legend.position='bottom',
+            axis.text=element_text(size=20),
+            plot.tag = element_text(size=26),
+            axis.title = element_text(size=22, face='bold'),
+            legend.text=element_text(size=22),
+            strip.text.x = element_text(size = 24),
+            strip.text.y = element_text(size = 24))
+    
+    layout <- "
+        A
+        A
+        B
+        "
+
+    combo_plot <- patchwork::wrap_plots(A=boxplot, B=boxplot_all, design=layout)
+
+    ggsave('cache/streamOrderFig.png', combo_plot, width=11, height=16)
 }
 
-
-
-
-
-
-
+#' makeCalculationValFig
+#'
+#' Makes figure of gage calculation experiment
+#' 
+#' @param gageVolume_val_combined hydrodynamic inundation simulation experiment results dataframe
+#' @param gageQexc_val Q_flood calculation experiment results dataframe
+#'
+#' @return figure written to file
 makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){    
     library(ggplot2)
     theme_set(theme_classic())
@@ -1096,11 +1299,15 @@ makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){
     return(forPlot)
 }
 
-
-
-
-
-
+#' makeMLValFig
+#'
+#' Makes figure of CONUS model validation
+#' 
+#' @param trainedModel_Q trained model for Q_flood
+#' @param trainedModel_V trained model for V_flood
+#' @param modelDF dataframe of gages for model training
+#'
+#' @return figure written to file
 makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
     library(tidymodels)
     library(ggplot2)
@@ -1221,13 +1428,14 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
                 'r2_tau'=r2))
 }
 
-
-
-
-
-
-
-
+#' makeMLQFig
+#'
+#' Makes figure of CONUS Q_total model validation
+#' 
+#' @param trainedModel_Q trained model for Q_total
+#' @param modelDF dataframe of gages for model training
+#'
+#' @return figure written to file
 makeMLQFig <- function(trainedModel_Q, modelDF){
     library(tidymodels)
     library(ggplot2)
@@ -1277,11 +1485,13 @@ makeMLQFig <- function(trainedModel_Q, modelDF){
     return('cache/validationTotalQML.png')
 }
 
-
-
-
-
-
+#' makeGageMap
+#'
+#' Makes figure of CONUS streamgages used in study
+#' 
+#' @param gage_df dataframe of gages for model training
+#'
+#' @return figure written to file
 makeGageMap <- function(gage_df) {
     sf::sf_use_s2(FALSE)
     library(ggplot2)
@@ -1330,8 +1540,11 @@ makeGageMap <- function(gage_df) {
     return(gage_shp)
 }
 
-
-
+#' makeHuc4Map
+#'
+#' Makes figure of CONUS basins used in study
+#'
+#' @return figure written to file
 makeHuc4Map <- function(){
     library(sf)
     library(ggplot2)

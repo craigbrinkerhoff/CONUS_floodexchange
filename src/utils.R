@@ -3,10 +3,13 @@
 ## Fall 2025
 
 
-
-
-
-
+#' grabAllGages
+#'
+#' Grabs all streamgages from the NHD
+#'
+#' @param huc4 basin ID code
+#'
+#' @return streamgages joined a priori to the NHD
 grabAllGages <- function(huc4){
   huc2 <- substr(huc4, 1, 2)
 
@@ -16,9 +19,13 @@ grabAllGages <- function(huc4){
   return(network_gages)
 }
 
-
-
-
+#' cleanUpDF
+#'
+#' Makes sure that same training data are used for V_flood, Q_flood, and Q_total machine learning models
+#'
+#' @param df model training dataframe
+#'
+#' @return filtered model training dataframe
 cleanUpDF <- function(df){
   out <- df %>%
     tidyr::drop_na(V_m3) %>%
@@ -28,10 +35,14 @@ cleanUpDF <- function(df){
   return(out)
 }
 
-
-
-
-
+#' cleanUpGages
+#'
+#' Ensure that model training dataframe and dataframe for plotting gages agree
+#'
+#' @param gages_df_combined Dataframe of all streamgages
+#' @param modelDF Dataframe of all streamgages used for model training
+#'
+#' @return filtered gage dataframe for mapping
 cleanUpGages <- function(gages_df_combined, modelDF){
   out <- gages_df_combined %>%
     dplyr::inner_join(modelDF, by=c('site_no'='GageID')) %>%
@@ -40,9 +51,15 @@ cleanUpGages <- function(gages_df_combined, modelDF){
   return(out)
 }
 
-
-
-
+#' getBasinGages
+#'
+#' Grabs streamgages that meet our QAQC filters
+#'
+#' @param huc4id NHD basin code
+#' @param gageRecordStart Start of time period for gage record
+#' @param gageRecordEnd End of time period for gage record
+#'
+#' @return streamgage IDs that pass our quality control
 getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd){
   set.seed(435)
 
@@ -78,10 +95,13 @@ getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd){
   return(gages_fin$site_no)
 }
 
-
-
-
-
+#' getBasinGagesVal
+#'
+#' Grabs all IDs EXCEPT the one withheld for jacknife regression
+#'
+#' @param BHGmodel_jacknife Bankfull hydraulics models dataframe
+#'
+#' @return Streamgage IDs sans the withheld streamgage
 getBasinGagesVal <- function(BHGmodel_jacknife){
 
     gages <- BHGmodel_jacknife$GageID
@@ -89,114 +109,15 @@ getBasinGagesVal <- function(BHGmodel_jacknife){
     return(gages)
 }
 
-
-
-
-
-
-modelsBHG <- function(){
-  dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
-    dplyr::select(c('Physiographic Division', '...9', '...11','...13','...17')) #some necessary manual munging for colnames from dataset
-
-  colnames(dataset) <- c('DIVISION', 'DA_km2', 'Qb_cms','Wb_m','Ab_m2')
-
-  dataset$Wb_m <- as.numeric(dataset$Wb_m)
-  dataset$Ab_m2 <- as.numeric(dataset$Ab_m2)
-  dataset$Qb_cms <- as.numeric(dataset$Qb_cms)
-  dataset$DA_km2 <- as.numeric(dataset$DA_km2)
-
-  dataset <- tidyr::drop_na(dataset)
-
-  division <- toupper(sort(unique(dataset$DIVISION))) #make lowercase and sort
-
-  #build models, grouped by physiographic region
-  models <- dataset %>%
-    dplyr::mutate(Wb_log10 = log10(Wb_m),
-                  Qb_log10 = log10(Qb_cms),
-                  DA_log10 = log10(DA_km2),
-                  Ab_log10 = log10(Ab_m2)) %>%
-    dplyr::group_by(DIVISION) %>%
-    dplyr::do(model_Wb = lm(Wb_log10~DA_log10, data=.),
-              model_Qb = lm(Qb_log10~DA_log10, data=.), #fit models by physiographic regions
-                model_Ab = lm(Ab_log10~DA_log10, data=.)) %>% 
-    dplyr::summarise(a_Wb = model_Wb$coef[1], #model intercept
-                    b_Wb = model_Wb$coef[2], #model exponent
-                    r2_Wb = summary(model_Wb)$r.squared, #model performance
-                    mean_residual_Wb = mean(10^(model_Wb$residuals), na.rm=T),
-                    see_Wb = summary(model_Wb)$sigma,
-                    a_Qb = model_Qb$coef[1],
-                    b_Qb = model_Qb$coef[2],
-                    r2_Qb = summary(model_Qb)$r.squared,
-                    mean_residual_Qb = mean(10^(model_Qb$residuals), na.rm=T),
-                    see_Qb = summary(model_Qb)$sigma,
-                    a_Ab = model_Ab$coef[1],
-                    b_Ab = model_Ab$coef[2],
-                    r2_Ab = summary(model_Ab)$r.squared,
-                    mean_residual_Ab = mean(10^(model_Ab$residuals), na.rm=T),
-                    see_Ab = summary(model_Ab)$sigma) %>%
-    dplyr::mutate(division = division)
-
-
-  models[models$division == "INTERMONTANE PLATEAU",]$division <- "INTERMONTANE PLATEAUS" #make sure names line up
-
-  #we found that the WB_m model for the Interior Highlands, i.e. mountainious region in Arkansas, Missouri, Oklahoma, and Ilinois, had really poor fit (r2: 0.27)
-    #and a crazy high model intercept. Likely due to extremely small sample size. So, we swap that model for the region that is most similar, the Appalachian Highlands.
-  models[models$division == 'INTERIOR HIGHLANDS',]$a_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$a_Wb
-  models[models$division == 'INTERIOR HIGHLANDS',]$b_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$b_Wb
-  models[models$division == 'INTERIOR HIGHLANDS',]$r2_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$r2_Wb
-  models[models$division == 'INTERIOR HIGHLANDS',]$mean_residual_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$mean_residual_Wb
-  models[models$division == 'INTERIOR HIGHLANDS',]$see_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$see_Wb
-
-  models[models$division == 'INTERIOR HIGHLANDS',]$a_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$a_Qb
-  models[models$division == 'INTERIOR HIGHLANDS',]$b_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$b_Qb
-  models[models$division == 'INTERIOR HIGHLANDS',]$r2_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$r2_Qb
-  models[models$division == 'INTERIOR HIGHLANDS',]$mean_residual_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$mean_residual_Qb
-  models[models$division == 'INTERIOR HIGHLANDS',]$see_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$see_Qb
-
-  models[models$division == 'INTERIOR HIGHLANDS',]$a_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$a_Ab
-  models[models$division == 'INTERIOR HIGHLANDS',]$b_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$b_Ab
-  models[models$division == 'INTERIOR HIGHLANDS',]$r2_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$r2_Ab
-  models[models$division == 'INTERIOR HIGHLANDS',]$mean_residual_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$mean_residual_Ab
-  models[models$division == 'INTERIOR HIGHLANDS',]$see_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$see_Ab
-
-  return(models)
-}
-
-
-
-
-
-dataBHG <- function(){
-  dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
-    dplyr::select(c('USGS Station No.', 'Physiographic Division', '...9', '...11','...13')) #some necessary manual munging for colnames from dataset
-  
-  colnames(dataset) <- c('GageID', 'DIVISION', 'DA_gage_skm','Qb_cms','Wb_m_obs')
-  
-  dataset$Qb_cms <- as.numeric(dataset$Qb_cms)
-  dataset$Wb_m_obs <- as.numeric(dataset$Wb_m_obs)
-  dataset$DA_gage_skm <- as.numeric(dataset$DA_gage_skm)
-  
-  dataset <- tidyr::drop_na(dataset) #only keep those with a usgs site and a non-NA Qb value (some data didn't report Qb)
-  
-  return(dataset)
-}
-
-
-
-fixGeometries <- function(rivnet){
-  curveLines <- dplyr::filter(rivnet, sf::st_geometry_type(rivnet) == 'MULTICURVE')
-  if(nrow(curveLines) > 0){ #if saved as a curve, recast geometry as a line
-    rivnet <- sf::st_cast(rivnet, 'MULTILINESTRING')
-  }
-  
-  return(rivnet)
-}
-
-
-
-
-
-
+#' makeGageDF
+#'
+#' Makes a dataframe from list of streamgages
+#'
+#' @param gage Gage record dataframe
+#' @param model_gages model river network
+#' @param huc4 basin code
+#'
+#' @return Dataframe of streamgages in a basin that are also in the model
 makeGageDF <- function(gage, model_gages, huc4){
   if(nrow(gage %>% dplyr::bind_rows())==0) {return(data.frame())}
   out <- gage %>%
@@ -208,38 +129,31 @@ makeGageDF <- function(gage, model_gages, huc4){
   return(out)
 }
 
+#' tallyReaches
+#'
+#' count number of modeled reaches in a basin
+#'
+#' @param basinPredictions hydrography dataframe of modeled predictions
+#'
+#' @return number of modeled reaches in a basin
+tallyReaches <- function(basinPredictions){
+    out <- nrow(basinPredictions)/4
 
+    return(out)
+}
 
-
-# #Our bandaid version of readNWISrating that manually constructs our own exsa url (for when the dataRetrieval function broke one time)
-# readNWISrating_CRAIG <- function(siteNumber, type='base', convertType = TRUE) {
-
-#   # No rating xml service
-#   #BROKEN AS OF 3/21/25. NWIS seems to have changed internal urls for rating tables, so dataRetrieval::readNWISrating() breaks because dataRetrieval::constructNWISURL() breaks. A band-aid is to directly constructing our own url using a custom version of readNWISrating() (in ~/src/utils.R), circumventing readNWISdata.
-#   #url <- constructNWISURL(siteNumber, service = "rating", ratingType = type)
-#   url <- paste0('https://waterdata.usgs.gov/nwisweb/data/ratings/', type, '/USGS.', siteNumber, '.', type, '.rdb')
-
-#   data <- dataRetrieval::importRDB1(url, asDateTime = FALSE, convertType = convertType)
-
-#   if ("current_rating_nu" %in% names(data)) {
-#     intColumns <- intColumns[!("current_rating_nu" %in% names(data)[intColumns])]
-#     data$current_rating_nu <- gsub(" ", "", data$current_rating_nu)
-#   }
-
-#   if (nrow(data) > 0) {
-#     if (type == "base") {
-#       Rat <- grep("//RATING ", comment(data), value = TRUE, fixed = TRUE)
-#       Rat <- sub("# //RATING ", "", Rat)
-#       Rat <- scan(text = Rat, sep = " ", what = "")
-#       attr(data, "RATING") <- Rat
-#     }
-
-#     siteInfo <- suppressMessages(dataRetrieval::readNWISsite(siteNumbers = siteNumber))
-
-#     attr(data, "siteInfo") <- siteInfo
-#     attr(data, "variableInfo") <- NULL
-#     attr(data, "statisticInfo") <- NULL
-#   }
-
-#   return(data)
-# }
+#' fixGeometries
+#'
+#' corrects geometry errors in sf object hydrography (if existing)
+#'
+#' @param rivnet hydrography as sf object
+#'
+#' @return sf object hydrography with fixed geometries
+fixGeometries <- function(rivnet){
+  curveLines <- dplyr::filter(rivnet, sf::st_geometry_type(rivnet) == 'MULTICURVE')
+  if(nrow(curveLines) > 0){ #if saved as a curve, recast geometry as a line
+    rivnet <- sf::st_cast(rivnet, 'MULTILINESTRING')
+  }
+  
+  return(rivnet)
+}

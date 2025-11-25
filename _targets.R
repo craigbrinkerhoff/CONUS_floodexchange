@@ -170,6 +170,7 @@ list(
   ##PAPER FIGURES
   tar_target(fig_validationML, makeMLValFig(model_Qf_eval, model_V_eval, modelDF)),
   tar_target(fig_reachTauMap, makeReachMap(basinsList_02, basinsList_10, basinsList_20, basinsList_50)),
+  tar_target(fig_reachTauMap_insets, makeReachMapInset(mapTau_50_0205, mapTau_50_0206, mapTau_50_0207, mapTau_50_0208, mapTau_50_0502, mapTau_50_0503, mapTau_50_0501, mapTau_50_0505)),
   tar_target(fig_streamorder, makeReachBoxplotsFig(combined_basinSummarySO)),
   tar_target(fig_doc, docExperimentPlot(CT_doc)),
 

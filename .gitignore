@@ -3,3 +3,4 @@ src/old/
 logs/
 /.quarto/
 manuscript/
+src/bandaid_NWISrating.R

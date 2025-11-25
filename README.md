@@ -6,7 +6,7 @@ This repo contains code to run our machine learning analysis of floodwater resid
 
 Use `environment.yaml` to generate our conda environment.
 
-You will need the dev version of `terra` (as of summer 2025) and need `flowdem`. Download within an interactive R session within the conda environment via:
+You will need a dev version of `terra` and `flowdem` (we used `terra` version 1.8-81 and `flowdem` version 0.2.). Download within an interactive R session within the conda environment via:
 
 ```r
 remotes::install_github("rspatial/terra",  repos='https://rspatial.r-universe.dev')

@@ -3,8 +3,14 @@
 ## Fall 2025
 
 
-
-
+#' runDOCExperiment
+#'
+#' Estimates stream order DOC fluxes using tau_channel and tau_comb via the Pulse Shunt model.
+#' Parameterized by in situ measurements that are hard coded into this function.
+#'
+#' @param df model predicitions dataframe for the 0108 basin (Connecticut River basin)
+#'
+#' @return Dataframe of Pulse-SHunt model results
 runDOCExperiment <- function(df){
     k_dy <- 0.22 #d^-1 Raymond et al 2016 & Kaplan et al. 2006
 
@@ -131,11 +137,16 @@ runDOCExperiment <- function(df){
     return(out)
 }
 
-
-
-
-
-
+#' buildGageFloodFunctions_volumeval
+#'
+#' Joins hydrodynamic validation volumes to modeled predictions
+#' Adds all auxillary variables needed, i.e. bankful hydraulics
+#'
+#' @param HUC4 basin ID code
+#' @param BHGmodel Bankfull hydraulics models
+#' @param gageDF gage metadata dataframe
+#'
+#' @return dataframe of gages with aux info for computing Q_flood, filtered for thosw with bankfull obs
 buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
     if(nrow(gageDF)==0){
         return(data.frame())
@@ -228,9 +239,17 @@ buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
     return(network)
 }
 
-
-
-
+#' buildGageFloodFunctions
+#'
+#' Filters for gaged reaches
+#' Adds all auxillary variables needed, i.e. bankful hydraulics
+#'
+#' @param HUC4 basin ID code
+#' @param BHGmodel Bankfull hydraulics models
+#' @param gageDF gage metadata dataframe
+#' @param min_floods Minimum number of floods on record we allow (to ensure we can compute flood probabilities)
+#'
+#' @return dataframe of gages with aux info for computing Q_flood
 buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, min_floods) {
     if(nrow(gageDF %>% dplyr::bind_rows())==0){
         return(data.frame())
@@ -353,11 +372,14 @@ buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, min_floods) {
     return(network)
 }
 
-
-
-
-
-
+#' runDEMModel
+#'
+#' runs inundation model
+#'
+#' @param huc4 basin ID code
+#' @param network hydrography dataframe for inundation mapping
+#'
+#' @return returns hydrography with inundation estimates
 runDEMModel <- function(huc4, network){
     if(nrow(network)==0){
         return(data.frame())
@@ -455,12 +477,14 @@ runDEMModel <- function(huc4, network){
     return(network)
 }
 
-
-
-
-
-
-
+#' addOtherNHDFeatures
+#'
+#' Add NHD features for ML model training on gages
+#'
+#' @param network hydrography network dataframe
+#' @param huc4id basin ID code
+#'
+#' @return hydrography dataframe with added features
 addOtherNHDFeatures <- function(network, huc4id){
     if(nrow(network)==0){
         return(data.frame())
@@ -577,9 +601,14 @@ addOtherNHDFeatures <- function(network, huc4id){
     return(network)
 }
 
-
-
-
+#' buildCONUSnetwork
+#'
+#' build hydrography network dataframe for ungaged prediction
+#'
+#' @param huc4 basin ID code
+#' @param BHGmodel Bankfull hydraulic geometry models
+#'
+#' @return hydrography dataframe
 buildCONUSnetwork <- function(huc4, BHGmodel){
     huc2 <- substr(huc4,1,2)
 
@@ -794,11 +823,17 @@ buildCONUSnetwork <- function(huc4, BHGmodel){
     return(network)
 }
 
-
-
-
-
-
+#' trainModelEval_V
+#'
+#' Evaluate ml performance for predicitng V_flood
+#'
+#' @param gageForModel_combined gage dataframe for model training
+#' @param nInnerFolds number inner layer folds for nested resampling cross-validation
+#' @param nOuterFolds number outer layer folds for nested resampling cross-validation
+#' @param numGrid Hyperparameter search space grid search parameter for nested resampling cross-validation
+#' @param numRepeats number of repeats, to account for stochastic differences from nested resampling cross-validation
+#'
+#' @return model evaluation across nOuterFolds
 trainModelEval_V <- function(gageForModel_combined, nInnerFolds, nOuterFolds, numGrid, numRepeats){
     library(tidymodels)
     library(parsnip)
@@ -861,9 +896,14 @@ trainModelEval_V <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
     return(result)
 }
 
-
-
-
+#' trainModelFin_V
+#'
+#' Train ml model on all data to predict V_flood from NHD
+#'
+#' @param gageForModel_combined gage dataframe for model training
+#' @param nInnerFolds number inner layer folds for nested resampling cross-validation
+#'
+#' @return model for predicitng V_flood
 trainModelFin_V <- function(gageForModel_combined, nInnerFolds, numGrid){
     library(tidymodels)
     library(parsnip)
@@ -917,11 +957,17 @@ trainModelFin_V <- function(gageForModel_combined, nInnerFolds, numGrid){
     return(final_model)
 }
 
-
-
-
-
-
+#' trainModelEval_Qf
+#'
+#' Evaluate ml performance for predicitng Q_flood
+#'
+#' @param gageForModel_combined gage dataframe for model training
+#' @param nInnerFolds number inner layer folds for nested resampling cross-validation
+#' @param nOuterFolds number outer layer folds for nested resampling cross-validation
+#' @param numGrid Hyperparameter search space grid search parameter for nested resampling cross-validation
+#' @param numRepeats number of repeats, to account for stochastic differences from nested resampling cross-validation
+#'
+#' @return model evaluation across nOuterFolds
 trainModelEval_Qf <- function(gageForModel_combined, nInnerFolds, nOuterFolds, numGrid, numRepeats){
     library(tidymodels)
     library(parsnip)
@@ -984,9 +1030,14 @@ trainModelEval_Qf <- function(gageForModel_combined, nInnerFolds, nOuterFolds, n
     return(result)
 }
 
-
-
-
+#' trainModelFin_Qf
+#'
+#' Train ml model on all data to predict Q_flood from NHD
+#'
+#' @param gageForModel_combined gage dataframe for model training
+#' @param nInnerFolds number inner layer folds for nested resampling cross-validation
+#'
+#' @return model for predicitng Q_flood
 trainModelFin_Qf <- function(gageForModel_combined, nInnerFolds, numGrid){
     library(tidymodels)
     library(parsnip)
@@ -1040,11 +1091,17 @@ trainModelFin_Qf <- function(gageForModel_combined, nInnerFolds, numGrid){
     return(final_model)
 }
 
-
-
-
-
-
+#' trainModelEval_Q
+#'
+#' Evaluate ml performance for predicitng Q_total
+#'
+#' @param gageForModel_combined gage dataframe for model training
+#' @param nInnerFolds number inner layer folds for nested resampling cross-validation
+#' @param nOuterFolds number outer layer folds for nested resampling cross-validation
+#' @param numGrid Hyperparameter search space grid search parameter for nested resampling cross-validation
+#' @param numRepeats number of repeats, to account for stochastic differences from nested resampling cross-validation
+#'
+#' @return model evaluation across nOuterFolds
 trainModelEval_Q <- function(gageForModel_combined, nInnerFolds, nOuterFolds, numGrid, numRepeats){
     library(tidymodels)
     library(parsnip)
@@ -1107,9 +1164,14 @@ trainModelEval_Q <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
     return(result)
 }
 
-
-
-
+#' trainModelFin_Q
+#'
+#' Train ml model on all data to predict Q_total from NHD
+#'
+#' @param gageForModel_combined gage dataframe for model training
+#' @param nInnerFolds number inner layer folds for nested resampling cross-validation
+#'
+#' @return model for predicitng Q_total
 trainModelFin_Q <- function(gageForModel_combined, nInnerFolds, numGrid){
     library(tidymodels)
     library(parsnip)
@@ -1163,11 +1225,17 @@ trainModelFin_Q <- function(gageForModel_combined, nInnerFolds, numGrid){
     return(final_model)
 }
 
-
-
-
-
-
+#' predictBasin
+#'
+#' Run three ML models on hydrography, predicitng Q_flood, V_flood, and Q_total
+#'
+#' @param huc4 basin ID code
+#' @param conusDF basin hydrography dataframe for model prediction
+#' @param model_Qf trained Q_flood model
+#' @param model_V trained V_flood model
+#' @param model_Q trained Q_total model
+#'
+#' @return hydrography dataframe with predictions
 predictBasin <- function(huc4, conusDF, model_Qf, model_V, model_Q){
     if(nrow(conusDF)==0){
         return(data.frame())
@@ -1203,11 +1271,14 @@ predictBasin <- function(huc4, conusDF, model_Qf, model_V, model_Q){
     return(conusDF)
 }
 
-
-
-
-
-
+#' summarizeBasinSO
+#'
+#' summarize model predictions by basin, flood size, and streamorder
+#'
+#' @param huc4 basin ID code
+#' @param basinPredictions hydrography dataframe with predictions
+#'
+#' @return dataframe summarized by flood size and streamorder
 summarizeBasinSO <- function(huc4, basinPredictions){
     if(nrow(basinPredictions)==0){
         return(data.frame())
@@ -1224,10 +1295,14 @@ summarizeBasinSO <- function(huc4, basinPredictions){
     return(out)
 }
 
-
-
-
-
+#' summarizeBasin
+#'
+#' summarize model predictions by basin and flood size
+#'
+#' @param huc4 basin ID code
+#' @param basinPredictions hydrography dataframe with predictions
+#'
+#' @return dataframe summarized by flood size
 summarizeBasin <- function(huc4, basinPredictions){
     if(nrow(basinPredictions)==0){
         return(data.frame())
@@ -1248,10 +1323,14 @@ summarizeBasin <- function(huc4, basinPredictions){
                 'out_diff'=out_diff))
 }
 
-
-
-
-
+#' makeMapBasin
+#'
+#' prep basin sf object for mapping
+#'
+#' @param basinPredictions hydrography dataframe with predictions
+#' @param chosen_prob flood size
+#'
+#' @return basin sf object with mapping bin generated, given a flood size
 makeMapBasin <- function(basinPredictions, chosen_prob){
     if(nrow(basinPredictions)==0){
         return(data.frame())
@@ -1270,17 +1349,18 @@ makeMapBasin <- function(basinPredictions, chosen_prob){
             ,TRUE ~ '1+'
         ))
 
-
     basinPredictions$tau_col <- factor(basinPredictions$tau_col, levels = c('-0.5', '0', '0.5', '1', '1+'))
 
     return(basinPredictions)
 }
 
-
-
-
-
-
+#' assignVolVals
+#'
+#' Assign basin codes to hydrodynamic inundation rasters
+#'
+#' @param vol_grids List of hydrodynamic volume rasters used for inundation verification
+#'
+#' @return lookup table between inundation rasters and basin ID codes
 assignVolVals <- function(vol_grids){
 
     huc4s <- terra::vect('data/path_to_data/CONUS_connectivity_data/HUC4s.shp')
@@ -1305,9 +1385,15 @@ assignVolVals <- function(vol_grids){
     return(out)
 }
 
-
-
-
+#' collectValReaches
+#'
+#' Collect all modele reaches to test hydrodynamic inundation simulations
+#' Using gages as proxy for USGS volume model mainstems b/c they are calibrated to these specific gages.
+#" This is a useful proxy for ensuring we only validate at reaches where the flood model actually passes through the entire catchment (bc ther gages are not on the edge of the model domains)
+#'
+#' @param huc4id basin ID code
+#'
+#' @return hydrography reach IDs
 collectValReaches <- function(huc4id){
     sf::sf_use_s2(FALSE)
 
@@ -1327,10 +1413,16 @@ collectValReaches <- function(huc4id){
     return(unit_catchments$NHDPlusID)
 }
 
-
-
-
-
+#' wrangleDepthGrids
+#'
+#' Get actual volumes from hydrodynamic inundation simulations given an observed depth
+#' prep for Q_flood comparison to jacknife regression estimates
+#' 
+#' @param huc4id basin ID code
+#' @param reaches_val NHD reaches that may overlap with hydrodynamic inundation simulatios
+#' @param volVal All the hydrodynamic inundation simulations
+#'
+#' @return V_flood comparsion result
 wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
     huc2 <- substr(huc4id,1, 2)
 
@@ -1434,11 +1526,12 @@ wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
     return(out)
 }
 
-
-
-
-
-
+#' modelsJacknifeBHG
+#'
+#' Fit jacknife regression models for bankful hydraulic geometry
+#' 
+#' 
+#' @return dataframe of model results
 modelsJacknifeBHG <- function(){
     dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
         dplyr::select(c('USGS Station No.','Physiographic Division', '...9', '...11','...13','...17')) #some necessary manual munging for colnames from dataset
@@ -1503,10 +1596,20 @@ modelsJacknifeBHG <- function(){
     return(out)
 }
 
-
-
-
-
+#' prepBankfullHydraulics
+#'
+#' Computes bankfull hydraulic geometry for gage (to calculate Q_flood)
+#' 
+#' @param mode 'deploy' or 'val'
+#' @param gageRecord streamgage record dataframe
+#' @param gage streamgage metadata dataframe
+#' @param BHGmodel_jacknife bankfull hydraulic models fit via jacknife regression (for val mode)
+#' @param BHGmodel bankfull hydraulic models fit (for deploy mode) 
+#' @param minAHGr2 minimum allowable r2 for depth AHG fit (if smaller than minAHGr2, remove)
+#' @param gageRecordStart starting date for streamflow records
+#' @param gageRecordEnd ending data for streamflow records 
+#'
+#' @return dataframe with bankfull hydraulics added to gage record
 prepBankfullHydraulics <- function(mode, gageRecord, gage, BHGmodel_jacknife, BHGmodel, minAHGr2, gageRecordStart, gageRecordEnd){
     if(nrow(gage %>% dplyr::bind_rows())==0){return(data.frame())}
     if(nrow(gageRecord %>% dplyr::bind_rows())==0){return(data.frame())}
@@ -1587,13 +1690,16 @@ prepBankfullHydraulics <- function(mode, gageRecord, gage, BHGmodel_jacknife, BH
     return(out)
 }
 
-
-
-
-
-
-
-
+#' calc_Qexc
+#'
+#' Calculates Q_flood_event for floods in streamgage record
+#' 
+#' @param mode 'deploy' or 'val'
+#' @param gageRecord streamgage record dataframe
+#' @param gagePrepped streamgage metadata dataframe
+#' @param depAHG depth AHG model parameters 
+#'
+#' @return dataframe of flood event variables
 calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG){
     if(nrow(gageRecord)==0){
         return(data.frame())
@@ -1747,8 +1853,13 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG){
     return(out)
 }
 
-
-
+#' prepGage
+#'
+#' Get streamgage metadata
+#' 
+#' @param gageID streamgage ID code
+#'
+#' @return dataframe gage metadata
 prepGage <- function(gageID){
     if(is.na(gageID)){
         return(data.frame())
@@ -1779,10 +1890,16 @@ prepGage <- function(gageID){
     return(site)
 }
 
-
-
-
-
+#' prepFlowRecord
+#'
+#' Build gage flow record
+#' 
+#' @param gage dataframe of gage metadata
+#' @param gageRecordStart Start of time period for gage record
+#' @param gageRecordEnd End of time period for gage record
+#' @param minRecordLength minimum length of years
+#'
+#' @return streamgage flow record dataframe
 prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength){
     set.seed(435)
 
@@ -1856,9 +1973,19 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
     return(gagedata)
 }
 
-
-
-
+#' prepInundationData
+#'
+#' Prep for DEM inundation
+#' compute hand rasters
+#' runs for a single model reach (reachID)
+#' 
+#' @param huc4 basin ID code
+#' @param reachID Model reach ID
+#' @param bankfullWidth reach bankfull width DON'T THINK ACTUALLY USED
+#' @param dem dem raster
+#' @param d8 flow direction raster
+#'
+#' @return hand raster
 prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
     #prep
     huc2 <- substr(huc4, 1, 2)
@@ -1965,9 +2092,14 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
                 'flag'='has pour points'))
 }
 
-
-
-
+#' modelInundation
+#'
+#' Maps inundation
+#' 
+#' @param inundationData inundation package
+#' @param floodDepth flood stage for specific event
+#'
+#' @return inundation map
 modelInundation <- function(inundationData, floodDepth){
     library(terra)
     hand <- inundationData$hand
@@ -1984,10 +2116,14 @@ modelInundation <- function(inundationData, floodDepth){
                 'depths'=floodDepths))
 }
 
-
-
-
-
+#' buildDepthAHG
+#'
+#' Fits a depth AHG curve and estimates flpow depth for flood events
+#' 
+#' @param gage streamgage metadata dataframe
+#' @param minADCPMeas minimum allowed field measurements to fit depth AHG (if smaller, skip gage)
+#'
+#' @return depth AHG parameters and fit statistics
 buildDepthAHG <- function(gage, minADCPMeas){
     if(nrow(gage)==0){return(data.frame())}
 
@@ -2045,10 +2181,94 @@ buildDepthAHG <- function(gage, minADCPMeas){
     return(site_info)
 }
 
+#' modelsBHG
+#'
+#' Fits bakfull hydraulics models using Bieger et al. (2015) data
+#'
+#' @return list of models
+modelsBHG <- function(){
+    dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
+        dplyr::select(c('Physiographic Division', '...9', '...11','...13','...17')) #some necessary manual munging for colnames from dataset
 
+    colnames(dataset) <- c('DIVISION', 'DA_km2', 'Qb_cms','Wb_m','Ab_m2')
 
-tallyReaches <- function(basinPredictions){
-    out <- nrow(basinPredictions)/4
+    dataset$Wb_m <- as.numeric(dataset$Wb_m)
+    dataset$Ab_m2 <- as.numeric(dataset$Ab_m2)
+    dataset$Qb_cms <- as.numeric(dataset$Qb_cms)
+    dataset$DA_km2 <- as.numeric(dataset$DA_km2)
 
-    return(out)
+    dataset <- tidyr::drop_na(dataset)
+
+    division <- toupper(sort(unique(dataset$DIVISION))) #make lowercase and sort
+
+    #build models, grouped by physiographic region
+    models <- dataset %>%
+        dplyr::mutate(Wb_log10 = log10(Wb_m),
+                    Qb_log10 = log10(Qb_cms),
+                    DA_log10 = log10(DA_km2),
+                    Ab_log10 = log10(Ab_m2)) %>%
+        dplyr::group_by(DIVISION) %>%
+        dplyr::do(model_Wb = lm(Wb_log10~DA_log10, data=.),
+                model_Qb = lm(Qb_log10~DA_log10, data=.), #fit models by physiographic regions
+                model_Ab = lm(Ab_log10~DA_log10, data=.)) %>% 
+        dplyr::summarise(a_Wb = model_Wb$coef[1], #model intercept
+                    b_Wb = model_Wb$coef[2], #model exponent
+                    r2_Wb = summary(model_Wb)$r.squared, #model performance
+                    mean_residual_Wb = mean(10^(model_Wb$residuals), na.rm=T),
+                    see_Wb = summary(model_Wb)$sigma,
+                    a_Qb = model_Qb$coef[1],
+                    b_Qb = model_Qb$coef[2],
+                    r2_Qb = summary(model_Qb)$r.squared,
+                    mean_residual_Qb = mean(10^(model_Qb$residuals), na.rm=T),
+                    see_Qb = summary(model_Qb)$sigma,
+                    a_Ab = model_Ab$coef[1],
+                    b_Ab = model_Ab$coef[2],
+                    r2_Ab = summary(model_Ab)$r.squared,
+                    mean_residual_Ab = mean(10^(model_Ab$residuals), na.rm=T),
+                    see_Ab = summary(model_Ab)$sigma) %>%
+        dplyr::mutate(division = division)
+
+    models[models$division == "INTERMONTANE PLATEAU",]$division <- "INTERMONTANE PLATEAUS" #make sure names line up
+
+    #we found that the WB_m model for the Interior Highlands, i.e. mountainious region in Arkansas, Missouri, Oklahoma, and Ilinois, had really poor fit (r2: 0.27)
+    #and a crazy high model intercept. Likely due to extremely small sample size. So, we swap that model for the region that is most similar, the Appalachian Highlands.
+    models[models$division == 'INTERIOR HIGHLANDS',]$a_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$a_Wb
+    models[models$division == 'INTERIOR HIGHLANDS',]$b_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$b_Wb
+    models[models$division == 'INTERIOR HIGHLANDS',]$r2_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$r2_Wb
+    models[models$division == 'INTERIOR HIGHLANDS',]$mean_residual_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$mean_residual_Wb
+    models[models$division == 'INTERIOR HIGHLANDS',]$see_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$see_Wb
+
+    models[models$division == 'INTERIOR HIGHLANDS',]$a_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$a_Qb
+    models[models$division == 'INTERIOR HIGHLANDS',]$b_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$b_Qb
+    models[models$division == 'INTERIOR HIGHLANDS',]$r2_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$r2_Qb
+    models[models$division == 'INTERIOR HIGHLANDS',]$mean_residual_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$mean_residual_Qb
+    models[models$division == 'INTERIOR HIGHLANDS',]$see_Qb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$see_Qb
+
+    models[models$division == 'INTERIOR HIGHLANDS',]$a_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$a_Ab
+    models[models$division == 'INTERIOR HIGHLANDS',]$b_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$b_Ab
+    models[models$division == 'INTERIOR HIGHLANDS',]$r2_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$r2_Ab
+    models[models$division == 'INTERIOR HIGHLANDS',]$mean_residual_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$mean_residual_Ab
+    models[models$division == 'INTERIOR HIGHLANDS',]$see_Ab <- models[models$division == 'APPALACHIAN HIGHLANDS',]$see_Ab
+
+    return(models)
+}
+
+#' dataBHG
+#'
+#' Wrangles Bieger et al. (2015) data
+#'
+#' @return cleaned dataset as dataframe
+dataBHG <- function(){
+    dataset <- readr::read_csv('data/bhg_us_database_bieger_2015.csv') %>% #available by searching for paper at https://swat.tamu.edu/search
+        dplyr::select(c('USGS Station No.', 'Physiographic Division', '...9', '...11','...13')) #some necessary manual munging for colnames from dataset
+
+    colnames(dataset) <- c('GageID', 'DIVISION', 'DA_gage_skm','Qb_cms','Wb_m_obs')
+
+    dataset$Qb_cms <- as.numeric(dataset$Qb_cms)
+    dataset$Wb_m_obs <- as.numeric(dataset$Wb_m_obs)
+    dataset$DA_gage_skm <- as.numeric(dataset$DA_gage_skm)
+
+    dataset <- tidyr::drop_na(dataset) #only keep those with a usgs site and a non-NA Qb value (some data didn't report Qb)
+
+    return(dataset)
 }
