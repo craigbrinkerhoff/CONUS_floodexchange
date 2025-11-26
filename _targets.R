@@ -22,9 +22,9 @@ source('src/figures.R')
 gageRecordStart <- '1983-01-01'
 gageRecordEnd <- '2023-12-31'
 minRecordLength <- 20 #[yrs] minimum number of years on record for a gage to be included
-minADCPMeas <- 20 #min depth stage adcp measurements for AHG
+minADCPMeas <- 20 #min depth~stage in situ flow measurements for AHG
 minAHGr2 <- 0.30 #min depth AHG fit
-min_floods <- 3 #minimum number of floods on record to compute probabilities
+min_floods <- 3 #min number of floods on record to compute probabilities
 
 #ml parameters
 nInnerFolds <- 10
@@ -89,23 +89,23 @@ gageAnalysis <- tar_map(
   tar_target(gageForModel, addOtherNHDFeatures(gageVolume, huc4)),
   tar_target(conusForModel, buildCONUSnetwork(huc4, BHGmodel)),
 
-  ## APPLY MODEL TO BASIN
-  tar_target(basinPredictions, predictBasin(huc4, conusForModel, model_Qf, model_V, model_Q)), #run ML models for basin reaches
-  tar_target(basinSummarySO, summarizeBasinSO(huc4, basinPredictions)), #summarize to basin scale by streamorder
-  tar_target(basinSummary, summarizeBasin(huc4, basinPredictions)), #summarize to basin scale
-  tar_target(nReaches, tallyReaches(basinPredictions)),#tally up modeled reaches for manuscript
+  ## APPLY MODEL TO BASIN AND SUMMARIZE BY STREAM ORDER
+  tar_target(basinPredictions, predictBasin(huc4, conusForModel, model_Qf, model_V, model_Q)),
+  tar_target(basinSummarySO, summarizeBasinSO(huc4, basinPredictions)),
+  tar_target(basinSummary, summarizeBasin(huc4, basinPredictions)),
+  tar_target(nReaches, tallyReaches(basinPredictions)),
 
-  ## MAPPING
+  ## PREP FOR MAPPING
   tar_target(gage_df, makeGageDF(gage, gageForModel, huc4)),
   tar_target(mapTau_02, makeMapBasin(basinPredictions, 0.02)),
   tar_target(mapTau_10, makeMapBasin(basinPredictions, 0.10)),
   tar_target(mapTau_20, makeMapBasin(basinPredictions, 0.20)),
   tar_target(mapTau_50, makeMapBasin(basinPredictions, 0.50)),
 
-  ## VALIDATE VOLUME MODEL per HUC4
-  tar_target(reaches_val, collectValReaches(huc4)), #grab reaches joined a priori to gage network (using gages as proxy for USGS volume model mainstems (b/c they are calibrated to these specific gages)). This is a useful proxy for ensuring we only validate at reaches where the flood model actually passes through the entire catchment (bc ther gages are not on the edge of the model domains)
+  ## VALIDATE VOLUME MODEL per BASIN
+  tar_target(reaches_val, collectValReaches(huc4)),
   tar_target(depths_val, wrangleDepthGrids(huc4, reaches_val, volVal)),
-  tar_target(gageFlux_val, buildGageFloodFunctions_volumeval(huc4, BHGmodel, depths_val)), #also passes along the observed volumes, compared to the normal function above
+  tar_target(gageFlux_val, buildGageFloodFunctions_volumeval(huc4, BHGmodel, depths_val)),
   tar_target(gageVolume_val, runDEMModel(huc4, gageFlux_val))
 )
 
@@ -119,15 +119,15 @@ list(
   ## PREP VALIDATION DATA
   tar_target(volVal, assignVolVals(vol_grids)),
 
-  ## BATCH BASINS
+  ## BATCH BASINS (see above)
   gageAnalysis,
 
-  ## COMBINE HUC4 OBJECTS FOR MODEL TRAINING
+  ## COMBINE BASIN OBJECTS FOR MODEL TRAINING
   tar_combine(gageVolume_val_combined, gageAnalysis$gageVolume_val, command = dplyr::bind_rows(!!!.x)),
-  tar_combine(gageForModel_combined, gageAnalysis$gageForModel, command = dplyr::bind_rows(!!!.x)), #gages for training
-  tar_target(modelDF, cleanUpDF(gageForModel_combined)), #gages for training
-  tar_combine(gages_df_combined, gageAnalysis$gage_df, command=dplyr::bind_rows(!!!.x)), #gages for map
-  tar_target(gagesDF, cleanUpGages(gages_df_combined, modelDF)), #gages for map
+  tar_combine(gageForModel_combined, gageAnalysis$gageForModel, command = dplyr::bind_rows(!!!.x)),
+  tar_target(modelDF, cleanUpDF(gageForModel_combined)),
+  tar_combine(gages_df_combined, gageAnalysis$gage_df, command=dplyr::bind_rows(!!!.x)),
+  tar_target(gagesDF, cleanUpGages(gages_df_combined, modelDF)),
   tar_combine(allGages_combined, gageAnalysis$allGages, command = dplyr::bind_rows(!!!.x)),
   tar_combine(nReaches_combined, gageAnalysis$nReaches, command = vctrs::vec_c(!!!.x)),
 
@@ -139,7 +139,7 @@ list(
   tar_target(model_Q_eval, trainModelEval_Q(modelDF, nInnerFolds, nOuterFolds, numGrid, numRepeats)),
   tar_target(model_Q, trainModelFin_Q(modelDF, nInnerFolds, numGrid)),
 
-  ## COMBINE HUC4 OBJECTS POST-MODEL TRAINING & PREDICTION
+  ## COMBINE BASIN OBJECTS POST-MODEL MAPPING & PREDICTION
   tar_combine(basinsList_02, gageAnalysis$mapTau_02, command = list(!!!.x)),
   tar_combine(basinsList_10, gageAnalysis$mapTau_10, command = list(!!!.x)),
   tar_combine(basinsList_20, gageAnalysis$mapTau_20, command = list(!!!.x)),
@@ -147,10 +147,10 @@ list(
   tar_combine(combined_basinSummarySO, gageAnalysis$basinSummarySO, command = dplyr::bind_rows(!!!.x)),
   tar_combine(combined_basinSummary, gageAnalysis$basinSummary, command = dplyr::bind_rows(!!!.x)),
 
-  ## RUN CONNECTICUT DOM EXPERIMENT
+  ## RUN CONNECTICUT DOC EXPERIMENT
   tar_target(CT_doc, runDOCExperiment(basinPredictions_0108)),
 
-  #QEXC COMPARISON VIA JACKNIFE REGRESSION
+  #QEXC COMPARISON VIA JACKNIFE REGRESSION & IN SITU QB
   tar_target(BHGmodel_jacknife, modelsJacknifeBHG()),
   tar_target(gagesBasin_val, getBasinGagesVal(BHGmodel_jacknife)),
   tar_target(gage_val, prepGage(gagesBasin_val),

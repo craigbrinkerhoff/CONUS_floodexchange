@@ -46,7 +46,7 @@ cleanUpDF <- function(df){
 cleanUpGages <- function(gages_df_combined, modelDF){
   out <- gages_df_combined %>%
     dplyr::inner_join(modelDF, by=c('site_no'='GageID')) %>%
-    dplyr::distinct() # a few duplicate rows, presumbaly from spatial joining of physio upstream. Not a problem in the modelDF
+    dplyr::distinct() # a few duplicate rows, presumably from spatial joining of physio upstream. Not a problem in the modelDF
 
   return(out)
 }
@@ -63,12 +63,14 @@ cleanUpGages <- function(gages_df_combined, modelDF){
 getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd){
   set.seed(435)
 
+  #grab all  huc8 ids to loop through
   huc2 <- substr(huc4id, 1, 2)
   huc8s <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU8.shp')) %>%
     dplyr::filter(substr(huc8, 1, 4)==huc4id)
 
   huc8ids <- huc8s$huc8
 
+  #loop through hub8 basins, grabbing gages that pass initial QAQC parameters
   gages_fin <- data.frame()
   for(i in huc8ids){
     gages <- tryCatch({dataRetrieval::whatNWISdata(huc = i,
@@ -97,7 +99,7 @@ getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd){
 
 #' getBasinGagesVal
 #'
-#' Grabs all IDs EXCEPT the one withheld for jacknife regression
+#' Grabs all ids EXCEPT the one withheld for jacknife regression
 #'
 #' @param BHGmodel_jacknife Bankfull hydraulics models dataframe
 #'

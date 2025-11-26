@@ -28,7 +28,7 @@ dependencies:
   - bwidget=1.10.1=ha770c72_0
   - bzip2=1.0.8=h4bc722e_7
   - c-ares=1.34.5=hb9d3cd8_0
-  - ca-certificates=2025.8.3=hbd8a1cb_0
+  - ca-certificates=2025.11.12=hbd8a1cb_0
   - cairo=1.18.4=h3394656_0
   - capnproto=1.0.2=h766bdaa_3
   - cfitsio=4.4.1=ha728647_2
@@ -153,7 +153,7 @@ dependencies:
   - nss=3.112=h159eef7_0
   - openjpeg=2.5.3=h5fbd93e_0
   - openldap=2.6.10=he970967_0
-  - openssl=3.5.2=h26f9b46_0
+  - openssl=3.6.0=h26f9b46_0
   - pandoc=3.6.3=ha770c72_0
   - pango=1.56.3=h9ac818e_1
   - pcre2=10.44=hc749103_2
@@ -172,8 +172,10 @@ dependencies:
   - r-base64url=1.4=r44hb1dbf0f_1007
   - r-bit=4.6.0=r44h2b5f3a1_0
   - r-bit64=4.6.0_1=r44h2b5f3a1_0
+  - r-bitops=1.0_9=r44h54b55ab_1
   - r-blob=1.2.4=r44hc72bb7e_2
   - r-bonsai=0.3.2=r44hc72bb7e_0
+  - r-brew=1.0_10=r44hc72bb7e_2
   - r-broom=1.0.8=r44hc72bb7e_0
   - r-bslib=0.9.0=r44hc72bb7e_0
   - r-cachem=1.1.0=r44hb1dbf0f_1
@@ -186,6 +188,7 @@ dependencies:
   - r-clock=0.7.3=r44h93ab643_0
   - r-codetools=0.2_20=r44hc72bb7e_1
   - r-colorspace=2.1_1=r44hdb488b9_0
+  - r-commonmark=2.0.0=r44h54b55ab_1
   - r-conflicted=1.2.0=r44h785f33e_2
   - r-cpp11=0.5.2=r44h785f33e_1
   - r-crayon=1.5.3=r44hc72bb7e_1
@@ -196,6 +199,7 @@ dependencies:
   - r-dataretrieval=2.7.18=r44h785f33e_0
   - r-dbi=1.2.3=r44hc72bb7e_1
   - r-dbplyr=2.5.0=r44hc72bb7e_1
+  - r-desc=1.4.3=r44hc72bb7e_2
   - r-diagram=1.6.5=r44ha770c72_3
   - r-dials=1.4.0=r44hc72bb7e_0
   - r-dicedesign=1.10=r44hb1dbf0f_1
@@ -213,6 +217,7 @@ dependencies:
   - r-fontawesome=0.5.3=r44hc72bb7e_0
   - r-forcats=1.0.0=r44hc72bb7e_2
   - r-foreach=1.5.2=r44hc72bb7e_3
+  - r-foreign=0.8_90=r44h54b55ab_1
   - r-fs=1.6.6=r44h93ab643_0
   - r-furrr=0.3.1=r44hc72bb7e_3
   - r-future=1.58.0=r44h785f33e_0
@@ -221,7 +226,9 @@ dependencies:
   - r-gargle=1.5.2=r44h785f33e_1
   - r-generics=0.1.4=r44hc72bb7e_0
   - r-getip=0.1_4=r44hdb488b9_1
+  - r-ggmap=4.0.2=r44hc72bb7e_1
   - r-ggplot2=3.5.2=r44hc72bb7e_0
+  - r-ggsn=0.5.0=r44hc72bb7e_5
   - r-globals=0.18.0=r44hc72bb7e_0
   - r-glue=1.8.0=r44h2b5f3a1_0
   - r-googledrive=2.1.1=r44hc72bb7e_2
@@ -242,6 +249,7 @@ dependencies:
   - r-ipred=0.9_15=r44hdb488b9_1
   - r-isoband=0.2.7=r44ha18555a_3
   - r-iterators=1.0.14=r44hc72bb7e_3
+  - r-jpeg=0.1_11=r44hd0206f1_1
   - r-jquerylib=0.1.4=r44hc72bb7e_3
   - r-jsonlite=2.0.0=r44h2b5f3a1_0
   - r-kernsmooth=2.23_26=r44h8461fee_0
@@ -257,6 +265,7 @@ dependencies:
   - r-lubridate=1.9.4=r44h2b5f3a1_0
   - r-lwgeom=0.2_14=r44hf77062d_6
   - r-magrittr=2.0.3=r44hb1dbf0f_3
+  - r-maptools=1.1_8=r44hdb488b9_1
   - r-mass=7.3_64=r44h2b5f3a1_0
   - r-matrix=1.7_3=r44h2ae2be5_0
   - r-memoise=2.0.1=r44hc72bb7e_3
@@ -277,9 +286,12 @@ dependencies:
   - r-parsnip=1.3.2=r44hc72bb7e_0
   - r-patchwork=1.3.0=r44hc72bb7e_0
   - r-pillar=1.10.2=r44hc72bb7e_0
+  - r-pkgbuild=1.4.8=r44hc72bb7e_1
   - r-pkgconfig=2.0.3=r44hc72bb7e_4
+  - r-pkgload=1.4.1=r44hc72bb7e_0
   - r-pki=0.1_14=r44he8289e2_2
   - r-plyr=1.8.9=r44ha18555a_1
+  - r-png=0.1_8=r44h21f035c_2
   - r-pracma=2.4.4=r44hc72bb7e_1
   - r-prettyunits=1.2.0=r44hc72bb7e_1
   - r-processx=3.8.6=r44h2b5f3a1_0
@@ -307,9 +319,13 @@ dependencies:
   - r-remotes=2.5.0=r44hc72bb7e_1
   - r-renv=1.1.5=r44h54b55ab_0
   - r-reprex=2.1.1=r44hc72bb7e_1
+  - r-rgooglemaps=1.5.3=r44hc72bb7e_1
+  - r-rjson=0.2.23=r44h3697838_1
   - r-rlang=1.1.6=r44h93ab643_0
   - r-rmarkdown=2.29=r44hc72bb7e_0
+  - r-roxygen2=7.3.3=r44h3697838_1
   - r-rpart=4.1.24=r44h2b5f3a1_0
+  - r-rprojroot=2.1.1=r44hc72bb7e_1
   - r-rsample=1.3.0=r44hc72bb7e_0
   - r-rsconnect=1.5.0=r44hc72bb7e_0
   - r-rstudioapi=0.17.1=r44hc72bb7e_0
@@ -325,6 +341,7 @@ dependencies:
   - r-shape=1.4.6.1=r44ha770c72_1
   - r-slider=0.3.2=r44h93ab643_0
   - r-snowflakeauth=0.1.2=r44hc72bb7e_0
+  - r-sp=2.2_0=r44h54b55ab_1
   - r-sparsevctrs=0.3.4=r44h2b5f3a1_0
   - r-squarem=2021.1=r44hc72bb7e_3
   - r-stringi=1.8.7=r44h3c328a7_0

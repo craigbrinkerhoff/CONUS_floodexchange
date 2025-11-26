@@ -13,6 +13,8 @@
 docExperimentPlot <- function(out){
     library(ggplot2)
     theme_set(theme_classic())
+
+    #plot
     plot <- ggplot(out, aes(x=StreamCalc, y=value_fin, group=key_fin, color=key_fin))+
         geom_line(linewidth=1.25)+
         geom_point(aes(fill=key_fin), pch=21, color='black', size=6)+
@@ -34,6 +36,7 @@ docExperimentPlot <- function(out){
             panel.border=element_rect(colour="black",size=1, fill=NA)) +
         scale_y_continuous(limits=c(0,4.5))
 
+    #write to file
     ggsave('cache/DOCremoval.png', plot)
 }
 
@@ -51,6 +54,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
     library(ggplot2)
     theme_set(theme_classic())
 
+    #CONUS boundary
     states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
     states <- dplyr::filter(states, !(NAME %in% c('Alaska',
                                                 'American Samoa',
@@ -69,6 +73,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
     basinsList_20 <- Filter(function(x) dim(x)[1] > 0, basinsList_20)
     basinsList_50 <- Filter(function(x) dim(x)[1] > 0, basinsList_50)
 
+    #plot
     map_02 <- ggplot() +
             geom_sf(data=basinsList_02[[1]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_02[[2]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
@@ -953,20 +958,18 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
                 plot.title = element_text(hjust = 0.5, size=30),
                 panel.border=element_rect(colour="black",size=1, fill=NA))+
             guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 8), title.position = "top", title.hjust = 0.5))
-    
-    
-	#BUILD INSET BOX BOUNDING BOX-------------------------------------
-    #inset centering
+
+    #setup inset box    
     zoom_to <- c(-79.5000, 39.1399)
 
-    #set up zoom bounds
+    #zoom bounds
     zoom_level <- 3
     lon_span <- 360 / 5^zoom_level
     lat_span <- 360 / 5^zoom_level
     lon_bounds_1 <- c(zoom_to[1] - lon_span / 2, zoom_to[1] + lon_span / 2)
     lat_bounds_1 <- c(zoom_to[2] - lat_span / 2, zoom_to[2] + lat_span / 2)
 
-    #set up inset box
+    #inset box
     df <- data.frame(lon_bounds_1, lat_bounds_1)
     box_1 <- df %>% 
         sf::st_as_sf(coords = c("lon_bounds_1", "lat_bounds_1"), crs = 4326) %>% 
@@ -980,6 +983,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
                 linewidth=3,
                 alpha=0)
 
+    #write to file
     layout <- "
         AB
         CD
@@ -990,22 +994,18 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
             legend.title = element_text(size = 28))
     
     ggsave('cache/reachTauMap.png', combo_plot, width=18, height=12)
-
-
-    #save insets for show scale (assembled later in illustrator)
-
 }
 
 makeReachMapInset <- function(map_0205, map_0206,map_0207,map_0208,map_0502, map_0503, map_0501, map_0505){
     library(ggplot2)
 	theme_set(theme_classic())
 
-	#BUILD INSET BOUNDING BOXES-------------------------------------
-    #setup centering
+	#setup inset box   
+    #centering
     zoom_to <- c(-79.5000, 39.1399)
 
 	# INSET 1
-    #set up zoom bounds
+    #zoom bounds
     zoom_level <- 3
     lon_span <- 360 / 5^zoom_level
     lat_span <- 360 / 5^zoom_level
@@ -1020,14 +1020,14 @@ makeReachMapInset <- function(map_0205, map_0206,map_0207,map_0208,map_0502, map
         sf::st_as_sfc()
 
 	#INSET 2
-    #set up zoom bounds
+    #zoom bounds
     zoom_level <- 4
 	lon_span <- 360 / 5^zoom_level
 	lat_span <- 360 / 5^zoom_level
 	lon_bounds_2 <- c(zoom_to[1] - lon_span / 2, zoom_to[1] + lon_span / 2)
 	lat_bounds_2 <- c(zoom_to[2] - lat_span / 2, zoom_to[2] + lat_span / 2)
 
-	#set up inset box
+	#inset box
     df <- data.frame(lon_bounds_2, lat_bounds_2)
 	box_2 <- df %>% 
         sf::st_as_sf(coords = c("lon_bounds_2", "lat_bounds_2"), crs = 4326) %>% 
@@ -1035,14 +1035,14 @@ makeReachMapInset <- function(map_0205, map_0206,map_0207,map_0208,map_0502, map
         sf::st_as_sfc()
 
 	#INSET 3
-    #set up zoom bounds
+    #zoom bounds
     zoom_level <- 5
 	lon_span <- 360 / 5^zoom_level
 	lat_span <- 360 / 5^zoom_level
 	lon_bounds_3 <- c(zoom_to[1] - lon_span / 2, zoom_to[1] + lon_span / 2)
 	lat_bounds_3 <- c(zoom_to[2] - lat_span / 2, zoom_to[2] + lat_span / 2)
 
-	#set up inset box
+	#inset box
     df <- data.frame(lon_bounds_3, lat_bounds_3)
 	box_3 <- df %>% 
         sf::st_as_sf(coords = c("lon_bounds_3", "lat_bounds_3"), crs = 4326) %>% 
@@ -1050,21 +1050,20 @@ makeReachMapInset <- function(map_0205, map_0206,map_0207,map_0208,map_0502, map
         sf::st_as_sfc()
 
 	#INSET 4
-    #set up zoom bounds
+    #zoom bounds
     zoom_level <- 6
 	lon_span <- 360 / 5^zoom_level
 	lat_span <- 360 / 5^zoom_level
 	lon_bounds_4 <- c(zoom_to[1] - lon_span / 2, zoom_to[1] + lon_span / 2)
 	lat_bounds_4 <- c(zoom_to[2] - lat_span / 2, zoom_to[2] + lat_span / 2)
 
-	#set up inset box
+	#inset box
     df <- data.frame(lon_bounds_4, lat_bounds_4)
 	box_4 <- df %>% 
         sf::st_as_sf(coords = c("lon_bounds_4", "lat_bounds_4"), crs = 4326) %>% 
         sf::st_bbox() %>% 
         sf::st_as_sfc()  		
 
-    #BUILD INSET MAPS----------------------------------------
 	#build complete inset river network
     insetNet <- rbind(map_0205, map_0206,map_0207,map_0208,map_0502, map_0503, map_0501, map_0505)
 
@@ -1108,7 +1107,6 @@ makeReachMapInset <- function(map_0205, map_0206,map_0207,map_0208,map_0502, map
 
     #plot inset 3
     insetShp3 <- sf::st_crop(insetNet, xmin=lon_bounds_3[1], xmax=lon_bounds_3[2], ymin=lat_bounds_3[1], ymax=lat_bounds_3[2])
-
     inset3 <- ggplot() +
     geom_sf(data = insetShp3, aes(color = tau_col), linewidth=0.5) + 		
         scale_color_manual(values=c('#a7bea9', '#84a98c', '#52796f', '#354f52', '#2f3e46'),
@@ -1122,7 +1120,7 @@ makeReachMapInset <- function(map_0205, map_0206,map_0207,map_0208,map_0502, map
         theme(legend.position='none',
             panel.background = element_rect(fill = "black"))
 
-    # PLOT DESIGN-----------------------------------------------------------------------
+    # write to file
     design <- "
     CDE
     "
@@ -1146,6 +1144,7 @@ makeReachBoxplotsFig <- function(combined_basinSummarySO){
     library(ggplot2)
     theme_set(theme_classic())
 
+    #wrangle
     forPlot <- combined_basinSummarySO %>%
         tidyr::gather(key=key, value=value, c('median_tau_hr_km', 'median_tau_channel_hr_km'))
 
@@ -1155,6 +1154,7 @@ makeReachBoxplotsFig <- function(combined_basinSummarySO){
                                             ifelse(forPlot$prob == 0.5, "50% flood", NA))))
     forPlot$prob_lab <- factor(forPlot$prob_lab, levels=c('2% flood', '10% flood', '20% flood', '50% flood'))
 
+    #plot
     boxplot <- ggplot(forPlot, aes(x=factor(StreamCalc), y=value, fill=key), color='black')+
         geom_boxplot() +
         scale_fill_manual(values=c('#86bbd8', '#b1b695'), name='', labels=c('Bankfull flow', 'Flood water')) +
@@ -1188,7 +1188,8 @@ makeReachBoxplotsFig <- function(combined_basinSummarySO){
             legend.text=element_text(size=22),
             strip.text.x = element_text(size = 24),
             strip.text.y = element_text(size = 24))
-    
+
+    #write to file
     layout <- "
         A
         A
@@ -1212,25 +1213,26 @@ makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){
     library(ggplot2)
     theme_set(theme_classic())
 
-    #get obs and modeled flow probs
-    #prep gages for filtering
+    #wrangle
     gageDF_02 <- dplyr::bind_rows(gageQexc_val) %>%
-        dplyr::filter(Qexc_m3dy > 0) %>% # integration necessitates storms be 2+ days long to calculate a flux
+        dplyr::filter(Qexc_m3dy > 0) %>%
         dplyr::mutate(prob = 0.02)
     
     gageDF_10 <- dplyr::bind_rows(gageQexc_val) %>%
-        dplyr::filter(Qexc_m3dy > 0) %>% # integration necessitates storms be 2+ days long to calculate a flux
+        dplyr::filter(Qexc_m3dy > 0) %>%
         dplyr::mutate(prob = 0.10)
 
     gageDF_20 <- dplyr::bind_rows(gageQexc_val) %>%
-        dplyr::filter(Qexc_m3dy > 0) %>% # integration necessitates storms be 2+ days long to calculate a flux
+        dplyr::filter(Qexc_m3dy > 0) %>%
         dplyr::mutate(prob = 0.20)
 
     gageDF_50 <- dplyr::bind_rows(gageQexc_val) %>%
-        dplyr::filter(Qexc_m3dy > 0) %>% # integration necessitates storms be 2+ days long to calculate a flux
+        dplyr::filter(Qexc_m3dy > 0) %>%
         dplyr::mutate(prob = 0.50)
 
     gageDF <- rbind(gageDF_02, gageDF_10, gageDF_20, gageDF_50)
+
+    #join obs and model datasets
     df <- gageDF %>%
         dplyr::group_by(site_no, prob, flag)%>%
         dplyr::summarise(Qexc_m3dy = quantile(Qexc_m3dy, 1-prob, na.rm=T)) %>%
@@ -1239,6 +1241,7 @@ makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){
         tidyr::pivot_wider(id_cols=c(site_no, prob), names_from=flag, values_from=c('Qexc_m3dy')) %>%
         tidyr::drop_na() #remove gages with no modeled flows (and a handful of 'gages' with no flow within our time record)
 
+    #plot
     lm <- lm(log10(model)~log10(obs), data=df)
     df$prob <- factor(df$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     plot1 <- ggplot(df, aes(x=obs, y= model)) +
@@ -1288,6 +1291,7 @@ makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){
             plot.tag = element_text(size=26,
                                     face='bold'))
 
+    #write to file
     layout <- "
     AB
     "
@@ -1313,7 +1317,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
     library(ggplot2)
     theme_set(theme_classic())
 
-    # Q model
+    # Q model wrangle
     full_predictions_Q <- data.frame()
     for(i in 1:length(trainedModel_Q)){
         results <- trainedModel_Q[[i]]$summary %>% collect_predictions()
@@ -1323,7 +1327,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
         full_predictions_Q <- rbind(full_predictions_Q, results)
     }
 
-    #V model
+    #V model wrangle
     full_predictions_V <- data.frame()
     for(i in 1:length(trainedModel_V)){
         results <- trainedModel_V[[i]]$summary %>% collect_predictions()
@@ -1346,6 +1350,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
         dplyr::left_join(modelDF, by='.row') %>%
         dplyr::filter(is.na(prob)==0)
 
+    #plot
     full_predictions_Q$prob <- factor(full_predictions_Q$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     r2_Q <- round(summary(lm(.pred~Qexc_m3dy, data=full_predictions_Q))$r.squared,2)
     scatter_Q <- ggplot(full_predictions_Q, aes(x=10^(Qexc_m3dy), y=10^(.pred))) + #natural space so we can use scale_log10
@@ -1386,7 +1391,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
             axis.text = element_text(size=22),
             panel.border=element_rect(colour="black",size=1, fill=NA))
 
-    #combine
+    #combine for tau
     full_predictions <- full_predictions_Q %>%
         dplyr::select(!prob)%>%
         dplyr::left_join(full_predictions_V, by='.row') %>%
@@ -1414,6 +1419,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
             axis.text = element_text(size=22),
             panel.border=element_rect(colour="black",size=1, fill=NA))
 
+    #write to file
     layout <- "
         ABC
     "
@@ -1441,7 +1447,7 @@ makeMLQFig <- function(trainedModel_Q, modelDF){
     library(ggplot2)
     theme_set(theme_classic())
 
-    # Q model
+    # Q model wrangle
     full_predictions_Q <- data.frame()
     for(i in 1:length(trainedModel_Q)){
         results <- trainedModel_Q[[i]]$summary %>% collect_predictions()
@@ -1460,6 +1466,7 @@ makeMLQFig <- function(trainedModel_Q, modelDF){
         dplyr::left_join(modelDF, by='.row') %>%
         dplyr::filter(is.na(prob)==0)
 
+    #plot
     full_predictions_Q$prob <- factor(full_predictions_Q$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     r2_Q <- round(summary(lm(.pred~Q_m3dy, data=full_predictions_Q))$r.squared,2)
     scatter_Q <- ggplot(full_predictions_Q, aes(x=10^(Q_m3dy), y=10^(.pred))) + #natural space so we can use scale_log10
@@ -1480,6 +1487,7 @@ makeMLQFig <- function(trainedModel_Q, modelDF){
             axis.text = element_text(size=15),
             panel.border=element_rect(colour="black",size=1, fill=NA))
 
+    #write to file
     ggsave('cache/validationTotalQML.png', scatter_Q, height=7, width=7)
 
     return('cache/validationTotalQML.png')
@@ -1498,7 +1506,6 @@ makeGageMap <- function(gage_df) {
     theme_set(theme_classic())
 
     #filter for the US only
-    # CONUS boundary
     states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
     states <- dplyr::filter(states, !(NAME %in% c('Alaska',
                                                 'American Samoa',
@@ -1516,6 +1523,7 @@ makeGageMap <- function(gage_df) {
     gage_shp <- gage_df %>%
         sf::st_as_sf(coords=c('lon', 'lat'), crs='epsg:4326')
 
+    #plot
     map <- ggplot(gage_shp) +
         geom_sf(data=states,
             color='black',
@@ -1535,6 +1543,8 @@ makeGageMap <- function(gage_df) {
                                     face='bold'))+
         xlab('')+
         ylab('')
+
+    #write to file
     ggsave('cache/gageMap.png', map, width=10, height=7)
 
     return(gage_shp)
@@ -1550,6 +1560,7 @@ makeHuc4Map <- function(){
     library(ggplot2)
     theme_set(theme_classic())
 
+    #CONUS boundary
     states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
     states <- dplyr::filter(states, !(NAME %in% c('Alaska',
                                                 'American Samoa',
@@ -1560,6 +1571,7 @@ makeHuc4Map <- function(){
                                                 'United States Virgin Islands',
                                                 'Hawaii'))) #remove non CONUS states/territories
 
+    #regional basin ids
     hucs <- c('0101', '0102', '0103', '0104', '0105', '0106', '0107', '0108', '0109', '0110',
         '0202', '0203', '0204', '0205', '0206', '0207', '0208',
         '0301', '0302', '0303', '0304', '0305', '0306', '0307', '0308', '0309', '0310', '0311', '0312', '0313', '0314', '0315', '0316', '0317', '0318',
@@ -1579,6 +1591,7 @@ makeHuc4Map <- function(){
         '1701','1702','1703','1704','1705','1706','1707','1708','1709','1710','1711','1712',
         '1801','1802','1803','1804','1805','1806','1807','1808','1809','1810')
 
+    #wrangle basins
     basins <- sf::st_read('data/HUC4s.shp') %>%
         dplyr::filter(huc4 %in% hucs) %>%
         dplyr::filter(name != 'Lake Erie')
@@ -1589,10 +1602,12 @@ makeHuc4Map <- function(){
     basins <- basins %>%
         sf::st_intersection(states)
 
+    #plot
     map <- ggplot(basins) +
         geom_sf(fill='#a4ac86', color='#333d29', linewidth=0.75) +
         geom_sf(data=states,color='black',linewidth=1.5,alpha=0) +
         theme(axis.text = element_text(size=22))
 
+    #write to file
     ggsave('cache/huc4s.png', map, width=12, height=10)
 }
