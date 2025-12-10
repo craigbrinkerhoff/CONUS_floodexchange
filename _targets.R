@@ -14,7 +14,7 @@ library(ggplot2)
 library(tibble)
 
 #load functions
-source('src/functions_v3.R')
+source('src/functions.R')
 source('src/utils.R')
 source('src/figures.R')
 
@@ -147,9 +147,6 @@ list(
   tar_combine(combined_basinSummarySO, gageAnalysis$basinSummarySO, command = dplyr::bind_rows(!!!.x)),
   tar_combine(combined_basinSummary, gageAnalysis$basinSummary, command = dplyr::bind_rows(!!!.x)),
 
-  ## RUN CONNECTICUT DOC EXPERIMENT
-  tar_target(CT_doc, runDOCExperiment(basinPredictions_0108)),
-
   #QEXC COMPARISON VIA JACKNIFE REGRESSION & IN SITU QB
   tar_target(BHGmodel_jacknife, modelsJacknifeBHG()),
   tar_target(gagesBasin_val, getBasinGagesVal(BHGmodel_jacknife)),
@@ -172,7 +169,7 @@ list(
   tar_target(fig_reachTauMap, makeReachMap(basinsList_02, basinsList_10, basinsList_20, basinsList_50)),
   tar_target(fig_reachTauMap_insets, makeReachMapInset(mapTau_50_0205, mapTau_50_0206, mapTau_50_0207, mapTau_50_0208, mapTau_50_0502, mapTau_50_0503, mapTau_50_0501, mapTau_50_0505)),
   tar_target(fig_streamorder, makeReachBoxplotsFig(combined_basinSummarySO)),
-  tar_target(fig_doc, docExperimentPlot(CT_doc)),
+  tar_target(fig_basinExchange, makeBasinExchangeMap(combined_basinSummary)),
 
   ## EXTENDED FIGURES
   tar_target(fig_validationCalculation, makeCalculationValFig(gageVolume_val_combined, gageQexc_val)),

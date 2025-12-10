@@ -1,5 +1,6 @@
 data/
 src/old/
+src/doc_init.R
 logs/
 /.quarto/
 manuscript/
