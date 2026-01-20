@@ -1643,3 +1643,57 @@ makeHuc4Map <- function(){
     #write to file
     ggsave('cache/huc4s.png', map, width=12, height=10)
 }
+
+
+makeFloodTimingFigure <- function(gage_df, gageFloodTiming_combined){
+    sf::sf_use_s2(FALSE)
+    library(ggplot2)
+    theme_set(theme_classic())
+
+    gage_df <- gage_df %>%
+        dplyr::left_join(gageFloodTiming_combined, by='site_no')
+
+    #filter for the US only
+    states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
+    states <- dplyr::filter(states, !(NAME %in% c('Alaska',
+                                                'American Samoa',
+                                                'Commonwealth of the Northern Mariana Islands',
+                                                'Guam',
+                                                'District of Columbia',
+                                                'Puerto Rico',
+                                                'United States Virgin Islands',
+                                                'Hawaii'))) #remove non CONUS states/territories
+
+    states <- sf::st_union(states) %>%
+        sf::st_transform(crs=sf::st_crs(4326))
+
+    #build gage shapefile
+    gage_shp <- gage_df %>%
+        sf::st_as_sf(coords=c('lon', 'lat'), crs='epsg:4326')
+
+    #plot
+    map <- ggplot(gage_shp) +
+        geom_sf(data=states,
+            color='black',
+            size=2,
+            alpha=0)+
+        geom_sf(aes(fill=factor(round(meanMonth,0))),
+            color='black',
+            pch=21,
+            size=4) +
+        scale_fill_brewer(palette='PuBuGn', name='Mean flood month')+
+        theme(axis.title = element_text(size=26, face='bold'),axis.text = element_text(family="Futura-Medium", size=20))+
+        theme(legend.position='bottom')+
+        theme(text = element_text(family = "Futura-Medium"),
+            legend.title = element_text(face = "bold", size = 18),
+            legend.text = element_text(family = "Futura-Medium", size = 18),
+            plot.tag = element_text(size=26,
+                                    face='bold'))+
+        xlab('')+
+        ylab('')
+
+    #write to file
+    ggsave('cache/meanFloodMonth.png', map, width=10, height=7)
+
+    return('written to file')
+}

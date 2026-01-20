@@ -35,6 +35,20 @@ cleanUpDF <- function(df){
   return(out)
 }
 
+#' cleanUpDF_timing
+#'
+#' Makes sure that good training data used for timing model
+#'
+#' @param df model training dataframe
+#'
+#' @return filtered model training dataframe
+cleanUpDF_timing <- function(df){
+  out <- df %>%
+    tidyr::drop_na(meanMonth)
+
+  return(out)
+}
+
 #' cleanUpGages
 #'
 #' Ensure that model training dataframe and dataframe for plotting gages agree
