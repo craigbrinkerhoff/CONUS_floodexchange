@@ -2,6 +2,7 @@
 ## Craig Brinkerhoff
 ## Fall 2025
 
+
 #' buildGageFloodFunctions
 #'
 #' Builds df with gage Qflood
@@ -134,6 +135,7 @@ buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, min_floods) {
     return(network)
 }
 
+
 #' buildGageFloodFunctions_volumeval
 #'
 #' Builds df with gage Qflood for validation sites (gages with in situ Qb values)
@@ -235,6 +237,7 @@ buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
 
     return(network)
 }
+
 
 #' runDEMModel
 #'
@@ -341,6 +344,7 @@ runDEMModel <- function(huc4, network){
 
     return(network)
 }
+
 
 #' addOtherNHDFeatures
 #'
@@ -466,6 +470,7 @@ addOtherNHDFeatures <- function(network, huc4id){
     
     return(network)
 }
+
 
 #' buildCONUSnetwork
 #'
@@ -691,14 +696,6 @@ buildCONUSnetwork <- function(huc4, BHGmodel){
     return(network)
 }
 
-# buildCONUSnetwork_timing <- function(huc4, conusForModel){
-    
-#     network <- conusForModel %>%
-#         dplyr::select(!prob)
-    
-#     return(network)
-# }
-
 
 #' trainModelEval_V
 #'
@@ -774,6 +771,7 @@ trainModelEval_V <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
     return(result)
 }
 
+
 #' trainModelFin_V
 #'
 #' Train ml model on all data to predict V_flood from NHD
@@ -835,6 +833,7 @@ trainModelFin_V <- function(gageForModel_combined, nInnerFolds, numGrid){
 
     return(final_model)
 }
+
 
 #' trainModelEval_Qf
 #'
@@ -910,6 +909,7 @@ trainModelEval_Qf <- function(gageForModel_combined, nInnerFolds, nOuterFolds, n
     return(result)
 }
 
+
 #' trainModelFin_Qf
 #'
 #' Train ml model on all data to predict Q_flood from NHD
@@ -971,6 +971,7 @@ trainModelFin_Qf <- function(gageForModel_combined, nInnerFolds, numGrid){
 
     return(final_model)
 }
+
 
 #' trainModelEval_Q
 #'
@@ -1046,6 +1047,7 @@ trainModelEval_Q <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
     return(result)
 }
 
+
 #' trainModelFin_Q
 #'
 #' Train ml model on all data to predict Q_total from NHD
@@ -1109,118 +1111,6 @@ trainModelFin_Q <- function(gageForModel_combined, nInnerFolds, numGrid){
 }
 
 
-# trainModelEval_timing <- function(gageForModel_combined, nInnerFolds, nOuterFolds, numGrid, numRepeats){
-#     library(tidymodels)
-#     library(parsnip)
-#     library(bonsai)
-
-#     #make sure all training sets comprise the same gages
-#     data_fin <- gageForModel_combined %>%
-#         dplyr::select(!NHDPlusID) %>%
-#         dplyr::select(!GageID)
-
-#     #tune using nested resampling procedure
-#     set.seed(76)
-#     folds_out <- vfold_cv(data_fin, repeats=numRepeats, v=nOuterFolds)
-
-#     nestedWrapper <- function(object){
-#         set.seed(86)
-#         split <- object
-#         split_train <- training(split)
-#         split_test  <- testing(split)
-#         folds_in <- vfold_cv(split_train, repeats=1, v=nInnerFolds)
-
-#         #recipe
-#         recipe_full <- recipe(meanMonth ~ ., data=split_train) %>%
-#             step_cut(StreamCalc, breaks=seq(1,max(data_fin$StreamCalc),1)) %>% #one hot encoding of stream order
-#             step_dummy(StreamCalc) %>%
-#             step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1 (necessary for some models, can't hurt for others)
-
-#         #model
-#         lightgbmboost_model <- boost_tree(tree_depth=tune(), min_n=tune(), trees=tune(), learn_rate=0.1) %>% #https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html and a default learning rate of 0.1 (learning rate and ntrees are inverses of one another so only one should be tuned)
-#             set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package kind of ad hoc for some reason
-#             set_mode("regression")
-
-#         #workflow
-#         workflow <- workflow() %>%
-#             add_model(lightgbmboost_model) %>%
-#             add_recipe(recipe_full)
-
-#         #tune via grid search
-#         set.seed(835)
-#         tuned_workflow <- tune_grid(workflow, resamples = folds_in, grid=numGrid, verbose=TRUE)
-
-#         #evalualte hyperparameter tuning
-#         bestModel <- tuned_workflow %>%
-#             select_best(metric='rsq')
-
-#         final_wf <- workflow %>%
-#             finalize_workflow(bestModel)
-
-#         #fit the final, best model to the completely independent test dataset
-#         fit_fin <- final_wf %>%    
-#             last_fit(split) #fits model to entire training set (across all folds) and evaluates on the indepedent test set
-
-#         return(list('summary'=fit_fin,
-#             'model_fin'=extract_workflow(fit_fin)))
-#     }
-
-#     result <- plyr::llply(folds_out$splits, nestedWrapper, .parallel=FALSE)
-#     return(result)
-# }
-
-# trainModelFin_timing <- function(gageForModel_combined, nInnerFolds, numGrid){
-#     library(tidymodels)
-#     library(parsnip)
-#     library(bonsai)
-
-#     #make sure all training sets comprise the same gages
-#     data_fin <- gageForModel_combined %>%
-#         dplyr::select(!meanMonth) %>%
-#         dplyr::select(!NHDPlusID) %>%
-#         dplyr::select(!GageID)
-
-#     #tune using nested resampling procedure
-#     set.seed(76)
-
-#     #retrain workflow on all data (using 10 fold cv for hyperparameter tuning)
-#     folds <- vfold_cv(data_fin, repeats=1, v=nInnerFolds)
-
-#     #recipe
-#     recipe_full <- recipe(meanMonth ~ ., data=data_fin) %>%
-#         step_cut(StreamCalc, breaks=seq(1,max(data_fin$StreamCalc),1)) %>% #one hot encoding of stream order
-#         step_dummy(StreamCalc) %>%
-#         step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1 (necessary for some models, can't hurt for others)
-
-#     #model
-#     lightgbmboost_model <- boost_tree(tree_depth=tune(), min_n=tune(), trees=tune(), learn_rate=0.1) %>% #https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html and a default learning rate of 0.1 (learning rate and ntrees are inverses of one another so only one should be tuned)
-#         set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package kind of ad hoc for some reason
-#         set_mode("regression")
-
-#     #workflow
-#     workflow <- workflow() %>%
-#         add_model(lightgbmboost_model) %>%
-#         add_recipe(recipe_full)
-
-#     #tune via grid search
-#     set.seed(875)
-#     tuned_workflow <- tune_grid(workflow, resamples = folds, grid=numGrid)
-
-#     #pick best hyperparameter set after tuning
-#     bestModel <- tuned_workflow %>%
-#         select_best(metric='rsq')
-
-#     final_wf <- workflow %>%
-#         finalize_workflow(bestModel)
-
-#     #finally, fit to all data
-#     set.seed(295)
-#     final_model <- final_wf %>% 
-#         fit(data_fin)
-
-#     return(final_model)
-# }
-
 #' predictBasin
 #'
 #' Run three ML models on hydrography, predicitng Q_flood, V_flood, and Q_total
@@ -1269,38 +1159,6 @@ predictBasin <- function(huc4, conusDF, model_Qf, model_V, model_Q){
     return(conusDF)
 }
 
-# predictBasin_timing <- function(huc4, conusDF, model_timing){
-#     if(nrow(conusDF)==0){
-#         return(data.frame())
-#     }
-
-#     #prep
-#     sf::sf_use_s2(FALSE)
-
-#     library(tidymodels)
-
-#     forPredict <- conusDF %>%
-#         sf::st_drop_geometry()
-
-#     nhdIDs <- forPredict$NHDPlusID
-
-#     forPredict <- forPredict %>%
-#         dplyr::select(!c('huc4', 'GageID', 'NHDPlusID', 'Wb_m', 'Hb_m', 'Qb_cms', 'shape'))
-
-#     #predict floodplain terms
-#     forPredict$log10meanMonth <- predict(model_timing, forPredict)$.pred
-#     forPredict$NHDPlusID <- nhdIDs
-
-#     #wrangle dataframe
-#     forPredict_fin <- forPredict %>%
-#         dplyr::select(c('NHDPlusID', 'log10meanMonth'))
-
-#     conusDF <- conusDF %>%
-#         dplyr::left_join(forPredict_fin, by=c('NHDPlusID')) %>%
-#         dplyr::select(c('huc4', 'NHDPlusID', 'LengthKM', 'StreamCalc', 'AreaSqKm', 'TotDASqKm', 'log10meanMonth', 'Shape'))
-
-#     return(conusDF)
-# }
 
 #' summarizeBasinSO
 #'
@@ -1327,21 +1185,6 @@ summarizeBasinSO <- function(huc4, basinPredictions){
     return(out)
 }
 
-# summarizeBasinSO_timing <- function(huc4, basinPredictions){
-#     if(nrow(basinPredictions)==0){
-#         return(data.frame())
-#     }
-
-#     #wrangle by stream order and flood size
-#     out <- basinPredictions %>%
-#         sf::st_drop_geometry() %>%
-#         dplyr::group_by(StreamCalc) %>%
-#         dplyr::summarize(
-#                     median_timing = median(10^(log10meanMonth), na.rm=T)) %>%
-#         dplyr::mutate(huc4 = huc4)
-
-#     return(out)
-# }
 
 #' summarizeBasin
 #'
@@ -1374,6 +1217,7 @@ summarizeBasin <- function(huc4, basinPredictions){
                 'out_diff'=out_diff))
 }
 
+
 #' makeMapBasin
 #'
 #' prep basin sf object for mapping
@@ -1404,6 +1248,7 @@ makeMapBasin <- function(basinPredictions, chosen_prob){
 
     return(basinPredictions)
 }
+
 
 #' assignVolVals
 #'
@@ -1436,6 +1281,7 @@ assignVolVals <- function(vol_grids){
     return(out)
 }
 
+
 #' collectValReaches
 #'
 #' Collect all modeled reaches to test hydrodynamic inundation simulations
@@ -1464,6 +1310,7 @@ collectValReaches <- function(huc4id){
 
     return(unit_catchments$NHDPlusID)
 }
+
 
 #' wrangleDepthGrids
 #'
@@ -1578,6 +1425,7 @@ wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
     return(out)
 }
 
+
 #' modelsJacknifeBHG
 #'
 #' Fit jacknife regression models for bankful hydraulic geometry
@@ -1648,6 +1496,7 @@ modelsJacknifeBHG <- function(){
 
     return(out)
 }
+
 
 #' prepBankfullHydraulics
 #'
@@ -1746,6 +1595,7 @@ prepBankfullHydraulics <- function(mode, gageRecord, gage, BHGmodel_jacknife, BH
 
     return(out)
 }
+
 
 #' calc_Qexc
 #'
@@ -1913,6 +1763,7 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG){
     return(out)
 }
 
+
 #' prepGage
 #'
 #' Get streamgage metadata
@@ -1950,6 +1801,7 @@ prepGage <- function(gageID){
 
     return(site)
 }
+
 
 #' prepFlowRecord
 #'
@@ -2035,6 +1887,7 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
 
     return(gagedata)
 }
+
 
 #' prepInundationData
 #'
@@ -2149,6 +2002,7 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
                 'flag'='has pour points'))
 }
 
+
 #' modelInundation
 #'
 #' Maps inundation
@@ -2172,6 +2026,7 @@ modelInundation <- function(inundationData, floodDepth){
     return(list('binary'=floodMap,
                 'depths'=floodDepths))
 }
+
 
 #' buildDepthAHG
 #'
@@ -2238,6 +2093,7 @@ buildDepthAHG <- function(gage, minADCPMeas){
 
     return(site_info)
 }
+
 
 #' modelsBHG
 #'
@@ -2311,6 +2167,7 @@ modelsBHG <- function(){
     return(models)
 }
 
+
 #' dataBHG
 #'
 #' Wrangles Bieger et al. (2015) data
@@ -2330,39 +2187,3 @@ dataBHG <- function(){
 
     return(dataset)
 }
-
-
-calc_FloodTiming <- function(gageQexc, min_floods){
-    df <- dplyr::bind_rows(gageQexc)
-
-    if(nrow(df)==0){
-        return(data.frame())
-    }
-
-    df <- df %>%
-        dplyr::mutate(month = lubridate::month(date)) %>%
-        dplyr::group_by(site_no) %>%
-        dplyr::summarize(meanMonth = mean(month, na.rm=T),
-                        n_floods = n()) %>%
-        dplyr::filter(n_floods >= min_floods) %>%
-    
-    return(df)
-}
-
-# addOtherNHDFeatures_timing <- function(gageForModel, gageFloodTiming){
-#     if(nrow(gageFloodTiming)==0){
-#         return(data.frame())
-#     }
-#     if(nrow(gageForModel)==0){
-#         return(data.frame())
-#     }
-#     gageFloodTiming <- gageFloodTiming %>%
-#         dplyr::select(!n_floods)
-
-#     out <- gageForModel %>%
-#         dplyr::select(!c('prob', 'Q_m3dy', 'Qexc_m3dy', 'V_m3'))%>%
-#         dplyr::distinct() %>%
-#         dplyr::left_join(gageFloodTiming, by=c('GageID'='site_no'))
-
-#     return(out)
-# }

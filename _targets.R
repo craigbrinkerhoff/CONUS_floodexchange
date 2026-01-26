@@ -1,6 +1,6 @@
 # _targets.R file
 # Craig Brinkerhoff
-# Fall 2025
+# Winter 2026
 # Master pipeline for floodwater residence time study
 
 #necessary global packages for pipelining.
@@ -85,9 +85,6 @@ gageAnalysis <- tar_map(
   tar_target(gageFlux, buildGageFloodFunctions(huc4, BHGmodel, gageQexc, min_floods)),
   tar_target(gageVolume, runDEMModel(huc4, gageFlux)),
 
-  ## CALCULATE FLOOD TIMING
-  tar_target(gageFloodTiming, calc_FloodTiming(gageQexc, min_floods)),
-
   ## PREP FOR ML
   tar_target(gageForModel, addOtherNHDFeatures(gageVolume, huc4)),
   tar_target(conusForModel, buildCONUSnetwork(huc4, BHGmodel)),
@@ -134,9 +131,6 @@ list(
   tar_combine(allGages_combined, gageAnalysis$allGages, command = dplyr::bind_rows(!!!.x)),
   tar_combine(nReaches_combined, gageAnalysis$nReaches, command = vctrs::vec_c(!!!.x)),
 
-  ## COMBINE BASIN OBJECTS FOR GAGE FLOOD TIMING
-  tar_combine(gageFloodTiming_combined, gageAnalysis$gageFloodTiming, command = vctrs::vec_c(!!!.x)),
-
   ## TRAIN ML MODELS
   tar_target(model_V_eval, trainModelEval_V(modelDF, nInnerFolds, nOuterFolds, numGrid, numRepeats)),
   tar_target(model_V, trainModelFin_V(modelDF, nInnerFolds, numGrid)),
@@ -181,18 +175,5 @@ list(
   tar_target(fig_validationCalculation, makeCalculationValFig(gageVolume_val_combined, gageQexc_val)),
   tar_target(fig_gageMap, makeGageMap(gagesDF)),
   tar_target(fig_totalQVal, makeMLQFig(model_Q_eval, modelDF)),
-  tar_target(fig_huc4s, makeHuc4Map()),
-  tar_target(fig_floodTiming, makeFloodTimingFigure(gagesDF, gageFloodTiming_combined))
+  tar_target(fig_huc4s, makeHuc4Map())
 )
-
-
-  #tar_target(gageForModel_timing, addOtherNHDFeatures_timing(gageForModel, gageFloodTiming)),
-  #tar_target(conusForModel_timing, buildCONUSnetwork_timing(huc4, conusForModel)),
-  #tar_target(basinPredictions_timing, predictBasin_timing(huc4, conusForModel_timing, model_timing)),
-  #tar_target(basinSummarySO_timing, summarizeBasinSO_timing(huc4, basinPredictions_timing)),
-
-  #tar_combine(gageForModel_timing_combined, gageAnalysis$gageForModel_timing, command = dplyr::bind_rows(!!!.x)),
-  #tar_target(modelDF_timing, cleanUpDF_timing(gageForModel_timing_combined)),
-  #tar_target(model_timing_eval, trainModelEval_timing(modelDF_timing, nInnerFolds, nOuterFolds, numGrid, numRepeats)),
-  #tar_target(model_timing, trainModelFin_timing(modelDF_timing, nInnerFolds, numGrid)),
-  #tar_combine(combined_basinSummarySO_timing, gageAnalysis$basinSummarySO_timing, command = dplyr::bind_rows(!!!.x)),

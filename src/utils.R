@@ -19,6 +19,7 @@ grabAllGages <- function(huc4){
   return(network_gages)
 }
 
+
 #' cleanUpDF
 #'
 #' Makes sure that same training data are used for V_flood, Q_flood, and Q_total machine learning models
@@ -35,6 +36,7 @@ cleanUpDF <- function(df){
   return(out)
 }
 
+
 #' cleanUpDF_timing
 #'
 #' Makes sure that good training data used for timing model
@@ -48,6 +50,7 @@ cleanUpDF_timing <- function(df){
 
   return(out)
 }
+
 
 #' cleanUpGages
 #'
@@ -64,6 +67,7 @@ cleanUpGages <- function(gages_df_combined, modelDF){
 
   return(out)
 }
+
 
 #' getBasinGages
 #'
@@ -111,6 +115,7 @@ getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd){
   return(gages_fin$site_no)
 }
 
+
 #' getBasinGagesVal
 #'
 #' Grabs all ids EXCEPT the one withheld for jacknife regression
@@ -124,6 +129,7 @@ getBasinGagesVal <- function(BHGmodel_jacknife){
     gages <- gages[gages != 'ungaged']
     return(gages)
 }
+
 
 #' makeGageDF
 #'
@@ -145,6 +151,7 @@ makeGageDF <- function(gage, model_gages, huc4){
   return(out)
 }
 
+
 #' tallyReaches
 #'
 #' count number of modeled reaches in a basin
@@ -157,6 +164,7 @@ tallyReaches <- function(basinPredictions){
 
     return(out)
 }
+
 
 #' fixGeometries
 #'

@@ -1,7 +1,5 @@
 data/
 src/old/
-src/doc_init.R
 logs/
 /.quarto/
 manuscript/
-src/bandaid_NWISrating.R
