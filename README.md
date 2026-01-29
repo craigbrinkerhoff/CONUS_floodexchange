@@ -13,7 +13,7 @@ remotes::install_github("rspatial/terra",  repos='https://rspatial.r-universe.de
 remotes::install_github("KennethTM/flowdem")
 ```
 
-The data repo is specified by a simulink at `~/data/path_to_data`. Other lookup tables auxillary datasets are stored directly in `~/data`. Make sure you inspect the functions to understand how the NHD-HR hydrography, DEMs, and other datasets must be stored to run. Note that setting up your own data repo is non-trivial.
+The data repo is specified by a simulink at `~/data/path_to_data`. Other lookup tables and auxillary datasets are stored directly in `~/data`. Make sure you inspect the functions to understand how the NHD-HR hydrography, DEMs, and other datasets must be stored to run. Note that setting up your own data repo is non-trivial.
 
 ## To run
 
