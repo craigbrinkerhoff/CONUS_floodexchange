@@ -3,3 +3,5 @@ src/old/
 logs/
 /.quarto/
 manuscript/
+cache/results/
+src/for_mutan_03_01.R

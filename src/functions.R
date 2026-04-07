@@ -1,6 +1,6 @@
 ## Main functions
 ## Craig Brinkerhoff
-## Fall 2025
+## Spring 2026
 
 
 #' buildGageFloodFunctions
@@ -1165,7 +1165,7 @@ predictBasin <- function(huc4, conusDF, model_Qf, model_V, model_Q){
 #' summarize model predictions by basin, flood size, and streamorder
 #'
 #' @param huc4 basin ID code
-#' @param basinPredictions hydrography dataframe with predictions
+#' @param basinPredictions sf dataframe with predictions
 #'
 #' @return dataframe summarized by flood size and streamorder
 summarizeBasinSO <- function(huc4, basinPredictions){
@@ -1191,7 +1191,7 @@ summarizeBasinSO <- function(huc4, basinPredictions){
 #' summarize model predictions by basin and flood size
 #'
 #' @param huc4 basin ID code
-#' @param basinPredictions hydrography dataframe with predictions
+#' @param basinPredictions sf dataframe with predictions
 #'
 #' @return dataframe summarized by flood size
 summarizeBasin <- function(huc4, basinPredictions){
@@ -1207,7 +1207,8 @@ summarizeBasin <- function(huc4, basinPredictions){
                     median_tau_channel_hr_km = median(10^(log10tau_channel_hr)/LengthKM, na.rm=T),
                     median_tau_hr_km = median(10^(log10tau_hr)/LengthKM, na.rm=T),
                     total_exchange_frac = sum(10^(log10Qexc_m3dy), na.rm=T)/sum(10^(log10Q_m3dy), na.rm=T)) %>%
-        dplyr::mutate(huc4 = huc4)
+        dplyr::mutate(huc4 = huc4) %>%
+        dplyr::mutate(total_exchange_frac = ifelse(total_exchange_frac > 1, 1, total_exchange_frac)) #a handful of basins are just above 1 because the numbers come from independent models, so we just round them off
 
     #diff between floods at-a-reach
     out_diff <- out %>%
@@ -1222,7 +1223,7 @@ summarizeBasin <- function(huc4, basinPredictions){
 #'
 #' prep basin sf object for mapping
 #'
-#' @param basinPredictions hydrography dataframe with predictions
+#' @param basinPredictions sf dataframe with predictions
 #' @param chosen_prob flood size
 #'
 #' @return basin sf object with mapping bin generated, given a flood size
@@ -1507,12 +1508,11 @@ modelsJacknifeBHG <- function(){
 #' @param gage streamgage metadata dataframe
 #' @param BHGmodel_jacknife bankfull hydraulic models fit via jacknife regression (for val mode)
 #' @param BHGmodel bankfull hydraulic models fit (for deploy mode) 
-#' @param minAHGr2 minimum allowable r2 for depth AHG fit (if smaller than minAHGr2, remove)
 #' @param gageRecordStart starting date for streamflow records
 #' @param gageRecordEnd ending data for streamflow records 
 #'
 #' @return dataframe with bankfull hydraulics added to gage record
-prepBankfullHydraulics <- function(mode, gageRecord, gage, BHGmodel_jacknife, BHGmodel, minAHGr2, gageRecordStart, gageRecordEnd){
+prepBankfullHydraulics <- function(mode, gageRecord, gage, BHGmodel_jacknife, BHGmodel){
     if(nrow(gage %>% dplyr::bind_rows())==0){return(data.frame())}
     if(nrow(gageRecord %>% dplyr::bind_rows())==0){return(data.frame())}
 
@@ -1523,6 +1523,7 @@ prepBankfullHydraulics <- function(mode, gageRecord, gage, BHGmodel_jacknife, BH
     gage <- sf::st_drop_geometry(gage) %>% 
         dplyr::bind_rows() %>% 
         dplyr::select(c('site_no', 'DA_skm', 'physio_region')) %>% 
+        dplyr::filter(site_no %in% gageRecord$site_no) %>%
         sf::st_drop_geometry() %>%
         dplyr::filter(!(is.na(physio_region))) %>%
         dplyr::distinct()
@@ -1605,9 +1606,10 @@ prepBankfullHydraulics <- function(mode, gageRecord, gage, BHGmodel_jacknife, BH
 #' @param gageRecord streamgage record dataframe
 #' @param gagePrepped streamgage metadata dataframe
 #' @param depAHG depth AHG model parameters 
+#' @param minAHGr2 minimum allowable r2 for depth AHG fit (if smaller than minAHGr2, remove)
 #'
 #' @return dataframe of flood event variables
-calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG){
+calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG, minAHGr2){
     if(nrow(gageRecord)==0){
         return(data.frame())
     }
@@ -1615,13 +1617,13 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG){
     #prep
     if(mode == 'val'){
         probs <- gagePrepped %>%
-            dplyr::filter(site_no == gageRecord[1,]$site_no) %>%
+            dplyr::filter(site_no == gageRecord[1,]$site_no) %>% #make sure dataset matches gageRecord dataset
             dplyr::filter(Qb_cms > 0 & Qb_cms_OBS > 0 & Ub_ms > 0 & Ub_ms_OBS > 0 & Wb_m > 0 & Wb_m_OBS > 0)
     }
 
     if(mode == 'deploy'){
         probs <- gagePrepped %>%
-            dplyr::filter(site_no == gageRecord[1,]$site_no) %>%
+            dplyr::filter(site_no == gageRecord[1,]$site_no) %>% #make sure dataset matches gageRecord dataset
             dplyr::filter(Qb_cms > 0 & Ub_ms > 0  & Wb_m > 0)
     }
 
@@ -1630,7 +1632,8 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG){
     }
 
     depAHG <- dplyr::bind_rows(depAHG) %>%
-        dplyr::filter(site_no == gageRecord[1,]$site_no)
+        dplyr::filter(site_no == gageRecord[1,]$site_no) %>%  #make sure dataset matches gageRecord dataset
+        dplyr::filter(lm_r2 >= minAHGr2)
 
     if(nrow(depAHG)==0){
         return(data.frame())
@@ -1843,22 +1846,22 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
 
     # convert to date (workaround to handle known date class bug with midnight- https://github.com/tidyverse/lubridate/issues/1124)
     gagedata$date <- lubridate::ymd_hms(format(as.POSIXct(gagedata$dateTime), format = "%Y-%m-%d %T %Z"))
-
+    gagedata$year <- lubridate::year(gagedata$date)
     ###########DO NOT NEED ANYMORE########################
     #get max annual floods for calculating the FEMA 100yr AEP
-    gagedata_aep <- gagedata %>%
-        dplyr::mutate(year = lubridate::year(date)) %>%
-        dplyr::group_by(year) %>%
-        dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
-                    Q_cms = max(Q_cms, na.rm=T))
+    # gagedata_aep <- gagedata %>%
+    #     dplyr::mutate(year = lubridate::year(date)) %>%
+    #     dplyr::group_by(year) %>%
+    #     dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
+    #                 Q_cms = max(Q_cms, na.rm=T))
 
-    gagedata_aep$rank <- rank(-gagedata_aep$Q_cms) #annual flood data
-    gagedata_aep$exceed_prob <- (gagedata_aep$rank/(nrow(gagedata_aep) + 1))
+    # gagedata_aep$rank <- rank(-gagedata_aep$Q_cms) #annual flood data
+    # gagedata_aep$exceed_prob <- (gagedata_aep$rank/(nrow(gagedata_aep) + 1))
     #######################################################
 
     #get number of years on record
-    start <- min(gagedata_aep$year)
-    end <- max(gagedata_aep$year)
+    start <- min(gagedata$year)
+    end <- max(gagedata$year)
     spread <- end - start
 
     if(spread < minRecordLength){return(data.frame())}
@@ -1872,18 +1875,23 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
 
     #grab rating table to convert to stage
     #source('src/utils.R') and readNWISrating_CRAIG() when dataRetrieval had a bug in it. No longer necessary
-    ratingTable <- tryCatch(dataRetrieval::readNWISrating(gageID, type='exsa'),
-                        error = function(m){return(data.frame())})
-    ratingTable$stage_m <- (ratingTable$INDEP  + ratingTable$SHIFT) * 0.3048 #ft to m
-    ratingTable$Q_cms <- ratingTable$DEP * 0.0283
+    # ratingTable <- tryCatch(dataRetrieval::readNWISrating(gageID, type='exsa'),
+    #                     error = function(m){return(data.frame())})
+    # ratingTable$stage_m <- (ratingTable$INDEP  + ratingTable$SHIFT) * 0.3048 #ft to m
+    # ratingTable$Q_cms <- ratingTable$DEP * 0.0283
 
-    #convert historical streamflow record to stages using rating table
-    gagedata$stage_m <- sapply(gagedata$Q_cms, function(i){ratingTable[which.min(abs(ratingTable$Q_cms - i)),]$stage_m})
+    # #convert historical streamflow record to stages using rating table
+    # gagedata$stage_m <- sapply(gagedata$Q_cms, function(i){ratingTable[which.min(abs(ratingTable$Q_cms - i)),]$stage_m})
 
-    if(is.list(gagedata$stage_m)){return(data.frame())} #sometimes you get an empty list b/c the rating table is empty
+    # if(is.list(gagedata$stage_m)){return(data.frame())} #sometimes you get an empty list b/c the rating table is empty
 
-    #add flag if gagedata is outside of the rating table
-    gagedata$ratingflag <- ifelse(gagedata$Q_cms > max(ratingTable$Q_cms) | gagedata$Q_cms < min(ratingTable$Q_cms), 1, 0)
+    # #add flag if gagedata is outside of the rating table
+    # gagedata$ratingflag <- ifelse(gagedata$Q_cms > max(ratingTable$Q_cms) | gagedata$Q_cms < min(ratingTable$Q_cms), 1, 0)
+
+    gagedata <- gagedata %>%
+        dplyr::filter(spread >= minRecordLength & date >= gageRecordStart & date <= gageRecordEnd) #just to make sure previous filtering worked
+
+    if(nrow(gagedata)== 0){return(data.frame())}
 
     return(gagedata)
 }
@@ -1930,6 +1938,16 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
     #match the nhdplus unit catchment 
     dem_clipped <- terra::crop(dem, unit_catchment)
     dem_clipped <- terra::mask(dem_clipped, unit_catchment)
+
+    #burn levee heights into dem (using national levee database)
+    nld <- sf::st_read('data/path_to_data/CONUS_connectivity_data/NLD_floodwalls.shp')
+    nld$levee_height_cm <- nld$WALL_HEIGH * 30.48 #ft to cm
+    nld <- terra::vect(nld)
+    nld <- terra::project(nld, terra::crs(dem_clipped))
+    raster_template = terra::rast(terra::ext(dem_clipped), resolution = 10,crs = terra::crs(dem_clipped))
+    nld_raster <- terra::rasterize(nld, raster_template, field = "levee_height_cm")
+    nld_raster <- terra::subst(nld_raster, NA, 0)
+    dem_clipped <- dem_clipped + nld_raster
 
     #fill and breach the dem to calculate flow directions
     r <- terra::rast(flowline_terra, resolution=10, extent=terra::ext(dem_clipped))
@@ -2186,4 +2204,121 @@ dataBHG <- function(){
     dataset <- tidyr::drop_na(dataset) #only keep those with a usgs site and a non-NA Qb value (some Bieger data didn't report Qb)
 
     return(dataset)
+}
+
+
+#' assignRegion
+#'
+#' Assign physiographic region to huc4 basin. Uses the most overlapping region for a given huc4
+#'
+#' @return dataframe lookup table
+assignRegion <- function(){
+    library(sf)
+
+    basin <- data.frame()
+    for(i in c('01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18')){
+        basin_temp <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', i, '/WBD_', i, '_HU2_Shape/Shape/WBDHU4.shp'))
+        basin_temp <- fixGeometries(basin_temp)
+
+        sf::sf_use_s2(FALSE)
+        regions <- sf::st_read('data/physio.shp')
+        regions <- fixGeometries(regions)
+        shp_temp <- sf::st_join(basin_temp, regions, largest=TRUE) #take the physiographic region that the basin is mostly in (dominant spatial intersection)
+
+        temp <- shp_temp %>%
+            sf::st_drop_geometry() %>%
+            dplyr::select(c('huc4', 'DIVISION', 'PROVINCE', 'SECTION')) 
+
+        basin <- rbind(basin, temp)
+    }
+
+    hucs <- c('0101', '0102', '0103', '0104', '0105', '0106', '0107', '0108', '0109', '0110',
+        '0202', '0203', '0204', '0205', '0206', '0207', '0208',
+        '0301', '0302', '0303', '0304', '0305', '0306', '0307', '0308', '0309', '0310', '0311', '0312', '0313', '0314', '0315', '0316', '0317', '0318',
+        '0401', '0402', '0403', '0404', '0405', '0406', '0407', '0408', '0409', '0410', '0411', '0412', '0413', '0414', '0420', '0427', '0429', '0430', '0431',
+        '0501', '0502', '0503', '0504', '0505', '0506', '0507', '0508', '0509', '0510', '0511', '0512', '0513', '0514',
+        '0601', '0602', '0603', '0604',
+        '0701', '0702','0703', '0704', '0705', '0706', '0707', '0708', '0709', '0710', '0711', '0712', '0713', '0714',
+        '0801', '0802', '0803', '0804', '0805', '0806', '0807', '0808', '0809',
+        '0901', '0902', '0903', '0904',
+        '1002', '1003', '1004', '1005', '1006', '1007', '1008', '1009', '1010', '1011', '1012', '1013', '1014', '1015', '1016', '1017', '1018', '1019', '1020', '1021', '1022', '1023', '1024', '1025', '1026', '1027', '1028', '1029', '1030',
+        '1101', '1102', '1103', '1104', '1105', '1106', '1107', '1108', '1109', '1110', '1111', '1112', '1113', '1114',
+        '1201', '1202', '1203', '1204', '1205', '1206', '1207', '1208', '1209','1210','1211',
+        '1301','1302','1303','1304','1305','1306','1307','1308','1309',
+        '1401','1402','1403','1404','1405','1406','1407','1408',
+        '1501','1502','1503','1504','1505','1506','1507','1508',
+        '1601','1602','1603','1604','1605','1606',
+        '1701','1702','1703','1704','1705','1706','1707','1708','1709','1710','1711','1712',
+        '1801','1802','1803','1804','1805','1806','1807','1808','1809','1810')
+    
+    out <- basin %>%
+        dplyr::filter(huc4 %in% hucs)
+    
+    return(out)
+}
+
+
+#' findRegulatedReaches
+#'
+#' Finds regulated river reaches in huc4 basin, i.e. reaches immediately downstream of a dammed reach
+#'
+#' @param huc4 basin code
+#' @param basinPredictions sf dataframe of model predictions for huc4 basin
+#' @param perc_thresh threshold for drainage area match to join dam to reach
+#' @param buffer_dist radius of buffer around dam to search for 'best matching' river reaches to join to.
+#'
+#' @return list of 2 dataframes: unregulated basin reaches and regulated basin reaches
+findRegulatedReaches <- function(huc4, basinPredictions, perc_thresh, buffer_dist){
+    library(sf)
+    huc2 <- substr(huc4, 1, 2)
+
+    if(nrow(basinPredictions) == 0){return(data.frame())}
+
+    network_VAA <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'), layer='NHDPlusFlowlineVAA', quiet=TRUE) %>%
+        dplyr::select(c('NHDPlusID', 'FromNode', 'ToNode'))
+
+    gdw <- sf::st_read('data/path_to_data/CONUS_connectivity_data/GDW_barriers_v1_0.shp') %>%
+        dplyr::filter(COUNTRY == 'United States') %>%
+        sf::st_transform(crs=sf::st_crs(basinPredictions))
+
+    dammed_reaches <- sf::st_join(basinPredictions, gdw, join = sf::st_is_within_distance, dist = buffer_dist)
+    dammed_reaches <- dammed_reaches %>%
+        dplyr::mutate(diff = abs(CATCH_SKM - TotDASqKm)/TotDASqKm) %>%
+        dplyr::filter(!(is.na(diff))) %>%
+        dplyr::group_by(NHDPlusID, prob) %>%
+        dplyr::slice_min(diff) %>%
+        dplyr::filter(diff <= perc_thresh) %>%
+        dplyr::left_join(network_VAA, by='NHDPlusID')
+    
+    regulated_reaches <- basinPredictions %>%
+        dplyr::left_join(network_VAA, by='NHDPlusID') %>%
+        dplyr::filter(FromNode %in% dammed_reaches$ToNode) #filter for reaches immedately downstream of dammed reach
+    
+    other_reaches <- basinPredictions %>%
+        dplyr::filter(!(NHDPlusID %in% c(regulated_reaches$NHDPlusID))) %>%
+        dplyr::filter(!(NHDPlusID %in% c(dammed_reaches$NHDPlusID)))
+
+    return(list('other_reaches'=other_reaches,
+                'regulated_reaches'=regulated_reaches))
+}
+
+
+#' writeToFile
+#'
+#' Writes model results to file for export
+#'
+#' @param huc4 basin code
+#' @param basinPredictions sf dataframe of model predictions for huc4 basin
+#'
+#' @return text confirming whether written to file
+writeToFile <- function(huc4, basinPredictions){
+    if(nrow(basinPredictions)==0){
+        return('empty df')
+    }
+    out <- basinPredictions %>%
+        sf::st_drop_geometry() %>%
+        dplyr::select(c('huc4', 'NHDPlusID', 'prob','LengthKM','log10tau_hr','log10Qexc_m3dy'))
+
+    readr::write_csv(out, paste0('cache/results/results_',huc4,'.csv'))
+    return('printed to file')
 }

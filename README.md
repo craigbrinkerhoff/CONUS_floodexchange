@@ -6,7 +6,7 @@ This repo contains code to run our machine learning analysis of United States ri
 
 Use `environment.yaml` to generate conda environment.
 
-You will need a dev version (at the time) of `terra` and `flowdem`. We used `terra` version 1.8-81 and `flowdem` version 0.2. Download within an interactive R session within the conda environment via:
+You will need a dev version (at the time) of `terra` and `flowdem`. We used `terra` version 1.9.14 and `flowdem` version 0.2.0. Download within an interactive R session within the conda environment via:
 
 ```r
 remotes::install_github("rspatial/terra",  repos='https://rspatial.r-universe.dev')

@@ -1,18 +1,18 @@
 ## Figures functions
 ## Craig Brinkerhoff
-## Fall 2025
+## Spring 2026
 
 
 
 
-#' makeBasinExchangeMap
+#' makeQexcFigure
 #'
-#' Makes basin flood discharge map
+#' Makes basin flood discharge map and physio region plots
 #' 
 #' @param combined_basinSummary dataframe of basin Qflood and total Q and fraction of flow in floodplain
 #'
 #' @return figure written to file
-makeBasinExchangeMap <- function(combined_basinSummary){
+makeQexcFigure <- function(combined_basinSummary, basin_regions){
     library(sf)
     library(ggplot2)
     theme_set(theme_classic())
@@ -62,37 +62,79 @@ makeBasinExchangeMap <- function(combined_basinSummary){
     #add model results
     combined_basinSummary <- combined_basinSummary$out %>%
         dplyr::select(c('huc4','prob', 'total_exchange_frac')) %>%
-        tidyr::drop_na(total_exchange_frac) %>%
-        dplyr::mutate(total_exchange_frac = ifelse(total_exchange_frac > 1, 1, total_exchange_frac)) #a handful of basins are just above 1 because the numbers come from independent models, so we just round them off
+        tidyr::drop_na(total_exchange_frac)
 
     basins <- basins %>%
         dplyr::left_join(combined_basinSummary, by='huc4') %>%
         tidyr::drop_na(total_exchange_frac)
     
-    basins$prob_lab <- ifelse(basins$prob == 0.02, "2% flood",
-                                    ifelse(basins$prob == 0.1, "10% flood",
-                                        ifelse(basins$prob == 0.2, "20% flood",
-                                            ifelse(basins$prob == 0.5, "50% flood", NA))))
-    basins$prob_lab <- factor(basins$prob_lab, levels=c('2% flood', '10% flood', '20% flood', '50% flood'))
+    basins$prob_lab <- ifelse(basins$prob == 0.02, "2% flood recurrence scenario",
+                                    ifelse(basins$prob == 0.1, "10% flood recurrence scenario",
+                                        ifelse(basins$prob == 0.2, "20% flood recurrence scenario",
+                                            ifelse(basins$prob == 0.5, "50% flood recurrence scenario", NA))))
+    basins$prob_lab <- factor(basins$prob_lab, levels=c('2% flood recurrence scenario', '10% flood recurrence scenario', '20% flood recurrence scenario', '50% flood recurrence scenario'))
 
     #plot
     map <- ggplot(basins) +
         geom_sf(aes(fill=total_exchange_frac*100), color='black', linewidth=0.5) +
         geom_sf(data=states,color='black',linewidth=1,alpha=0) +
-        scale_fill_gradient(name='% of flow exchanged\nwith floodplain', low='white', high='#003049', limits=c(0,100))+
+        scale_fill_gradient(name='% of flow exchanged with floodplain', low='white', high='#003049', limits=c(0,100))+
+        labs(tag='A')+
         theme(legend.position='bottom',
-            strip.text.x = element_text(size = 18),
-            strip.text.y = element_text(size = 16),
-            axis.text = element_text(size=14),
-            legend.title=element_text(size=18),
-            legend.text = element_text(size=14))+
+            strip.text.x = element_text(size = 20),
+            strip.text.y = element_text(size = 18),
+            axis.text = element_text(size=16),
+            legend.title=element_text(size=20),
+            legend.text = element_text(size=14),
+            plot.tag = element_text(size=26,face='bold'))+
         guides(color='none')+
         facet_wrap(vars(prob_lab), nrow=2) +
         theme(strip.background = element_blank(),
             panel.border=element_rect(colour="black",size=1, fill=NA))
 
+    #regional stats   
+    forPlot <- combined_basinSummary %>%
+        dplyr::left_join(basin_regions, by='huc4')
+
+    forPlot$prob_lab <- ifelse(forPlot$prob == 0.02, "2%",
+                                    ifelse(forPlot$prob == 0.1, "10%",
+                                        ifelse(forPlot$prob == 0.2, "20%",
+                                            ifelse(forPlot$prob == 0.5, "50%",
+                                                ifelse(forPlot$prob == -999, "Channel", NA)))))
+    forPlot$prob_lab <- factor(forPlot$prob_lab, levels=c('Channel', '2%', '10%', '20%', '50%'))
+    forPlot$DIVISION <- factor(forPlot$DIVISION, levels=c('PACIFIC MOUNTAIN SYSTEM','INTERMONTANE PLATEAUS',
+                                                        'ROCKY MOUNTAIN SYSTEM','LAURENTIAN UPLAND',
+                                                        'INTERIOR PLAINS','INTERIOR HIGHLANDS',
+                                                        'APPALACHIAN HIGHLANDS','ATLANTIC PLAIN'))
+    
+    label_cols <- c('#448aff', '#1565c0', '#009688','#8bc34a','#ffc107','#ff9800','#f44336','#ad1457')
+
+    regional_boxplots <- ggplot(forPlot)+
+        geom_boxplot(aes(y=DIVISION, x=total_exchange_frac*100, fill=factor(prob_lab)), color='black') +
+        scale_fill_manual(values=c('Channel'='#ad6a6c', '2%'='#faf3dd', '10%'='#c8d5b9', '20%'='#8fc0a9', '50%'='#68b0ab'), name='Flood size') +
+        coord_cartesian(xlim=c(0,100))+
+        xlab('% of flow exchanged with floodplain')+
+        ylab('') +
+        labs(tag='B')+
+        theme(legend.position='bottom',
+            axis.text.y = element_text(color=label_cols, face="bold"),
+            axis.text=element_text(size=20),
+            axis.title = element_text(size=22, face='bold'),
+            legend.text=element_text(size=20),
+            legend.title=element_text(size=22),
+            plot.tag = element_text(size=26,face='bold'))
+
+    layout <- "
+    A
+    B
+    "
+
+    comboPlot <- patchwork::wrap_plots(A=patchwork::free(map), B=regional_boxplots, design=layout)
+
     #write to file
-    ggsave('cache/basinExchange.png', map, width=10.5, height=8.5)
+    ggsave('cache/QexcFig.png', comboPlot, width=14, height=20)
+
+    return(forPlot)
 }
 
 #' makeReachMap
@@ -334,7 +376,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
             geom_sf(data=basinsList_02[[203]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_02[[204]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_02[[205]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
-            ggtitle('2% flood')+
+            ggtitle('2% flood recurrence scenario')+
             geom_sf(data=states,color='black',size=1.5,alpha=0)+  
             scale_color_manual(values=c('#a7bea9', '#84a98c', '#52796f', '#354f52', '#2f3e46'),
                         name=bquote(bold(tau[flood]~'['*hr^1*km^-1*']')),
@@ -555,7 +597,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
             geom_sf(data=basinsList_10[[203]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_10[[204]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_10[[205]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
-            ggtitle('10% flood')+
+            ggtitle('10% flood recurrence scenario')+
             geom_sf(data=states,color='black',size=1.5,alpha=0)+
             scale_color_manual(values=c('#a7bea9', '#84a98c', '#52796f', '#354f52', '#2f3e46'),
                         name=bquote(bold(tau[flood]~'['*hr^1*km^-1*']')),
@@ -776,7 +818,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
             geom_sf(data=basinsList_50[[203]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_50[[204]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_50[[205]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
-            ggtitle('50% flood')+
+            ggtitle('50% flood recurrence scenario')+
             geom_sf(data=states,color='black',size=1.5,alpha=0)+
             scale_color_manual(values=c('#a7bea9', '#84a98c', '#52796f', '#354f52', '#2f3e46'),
                         name=bquote(bold(tau[flood]~'['*hr^1*km^-1*']')),
@@ -998,7 +1040,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
             geom_sf(data=basinsList_20[[203]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_20[[204]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_20[[205]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
-            ggtitle('20% flood')+
+            ggtitle('20% flood recurrence scenario')+
             geom_sf(data=states,color='black',size=1.5,alpha=0)+  
             scale_color_manual(values=c('#a7bea9', '#84a98c', '#52796f', '#354f52', '#2f3e46'),
                         name=bquote(bold(tau[flood]~'['*hr^1*km^-1*']')),
@@ -1031,7 +1073,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
         sf::st_bbox() %>% 
         sf::st_as_sfc()
 
-    # add inset 1 bounding box to map
+    #add inset 1 bounding box to map
     map_50 <- map_50 +
         geom_sf(data=box_1,
                 color='#fca311',
@@ -1047,7 +1089,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
     combo_plot <- patchwork::wrap_plots(A=map_02, B=map_10, C=map_20, D=map_50, design=layout, guides='collect') &
         theme(legend.position='bottom',
             legend.title = element_text(size = 28))
-    
+
     ggsave('cache/reachTauMap.png', combo_plot, width=18, height=12)
 }
 
@@ -1203,17 +1245,18 @@ makeReachMapInset <- function(map_0205, map_0206,map_0207,map_0208,map_0502, map
 }
 
 
-#' makeReachBoxplotsFig
+#' makeTauFigure
 #'
-#' Makes figure of CONUS model results by stream order
+#' Makes figure of CONUS model results by stream order and physio region
 #' 
 #' @param combined_basinSummarySO basin stream order summary dataframe
 #'
 #' @return figure written to file
-makeReachBoxplotsFig <- function(combined_basinSummarySO){
+makeTauFigure <- function(combined_basinSummarySO, combined_basinSummary, basin_regions){
     library(ggplot2)
     theme_set(theme_classic())
 
+    ##STREAM ORDER PLOTS
     #wrangle
     forPlot <- combined_basinSummarySO %>%
         dplyr::select(!median_tau_channel_hr_km)
@@ -1240,12 +1283,58 @@ makeReachBoxplotsFig <- function(combined_basinSummarySO){
         scale_y_log10(guide = "axis_logticks",  labels = scales::label_log(base=10), breaks=c(10^-2, 10^-1, 10^0, 10^1))+
         xlab(bquote(bold(Stream~Order)))+
         ylab(bquote(bold(tau~'['*hr^1*km^-1*']'))) +
+        labs(tag='A')+
         theme(legend.position='bottom',
             axis.text=element_text(size=20),
             axis.title = element_text(size=22, face='bold'),
-            legend.text=element_text(size=20))
+            legend.text=element_text(size=20),
+            plot.tag = element_text(size=26,face='bold'))
     
-    ggsave('cache/streamOrderFig.png', boxplot_all, width=10, height=8)
+
+    #REGIONAL SPATIAL ANALYSIS 
+    forPlot <- combined_basinSummary$out %>%
+        dplyr::left_join(basin_regions, by='huc4')
+
+    forPlot$prob_lab <- ifelse(forPlot$prob == 0.02, "2%",
+                                    ifelse(forPlot$prob == 0.1, "10%",
+                                        ifelse(forPlot$prob == 0.2, "20%",
+                                            ifelse(forPlot$prob == 0.5, "50%",
+                                                ifelse(forPlot$prob == -999, "Channel", NA)))))
+    forPlot$prob_lab <- factor(forPlot$prob_lab, levels=c('Channel', '2%', '10%', '20%', '50%'))
+
+    forPlot$DIVISION <- factor(forPlot$DIVISION, levels=c('PACIFIC MOUNTAIN SYSTEM','INTERMONTANE PLATEAUS',
+                                                        'ROCKY MOUNTAIN SYSTEM','LAURENTIAN UPLAND',
+                                                        'INTERIOR PLAINS','INTERIOR HIGHLANDS',
+                                                        'APPALACHIAN HIGHLANDS','ATLANTIC PLAIN'))
+
+    label_cols <- c('#448aff', '#1565c0', '#009688','#8bc34a','#ffc107','#ff9800','#f44336','#ad1457')
+
+    regional_boxplots <- ggplot(forPlot)+
+        geom_boxplot(aes(y=DIVISION, x=median_tau_hr_km, fill=factor(prob_lab)), color='black') +
+        scale_fill_manual(values=c('Channel'='#ad6a6c', '2%'='#faf3dd', '10%'='#c8d5b9', '20%'='#8fc0a9', '50%'='#68b0ab'), name='Flood size') +
+        scale_x_log10(guide = "axis_logticks",  labels = scales::label_log(base=10), breaks=c(10^-2, 10^-1, 10^0, 10^1))+
+        xlab(bquote(bold(tau~'['*hr^1*km^-1*']')))+
+        ylab('') +
+        labs(tag='B')+
+        theme(legend.position='none',
+            axis.text=element_text(size=20),
+            axis.text.y=element_text(size=20,color=label_cols, face='bold'),
+            axis.title = element_text(size=22, face='bold'),
+            legend.text=element_text(size=20),
+            legend.title=element_text(size=22),
+            plot.tag = element_text(size=26,face='bold'))
+    
+    # write to file
+    design <- "
+    A
+    B
+    "
+
+    comboPlot <- patchwork::wrap_plots(A=patchwork::free(boxplot_all), B=regional_boxplots, design=design)
+
+    ggsave('cache/tauFig.png', comboPlot, width=12, height=18)
+
+    return(forPlot)
 }
 
 
@@ -1297,10 +1386,10 @@ makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){
         geom_point(aes( fill=prob), pch=21, size=10, color='black') +
         geom_smooth(method='lm', se=F, color='black', linewidth=2)+
         annotate("text", x = 10^4, y = 10^9, label = bquote(R^2*'= '*.(round(summary(lm)$r.squared,2))), size=6)+
-        annotate("text", x = 10^4, y = 10^8.65, label = bquote(n*'= '*.(nrow(df)/4)*' gages'), size=6)+
+        annotate("text", x = 10^4, y = 10^8.65, label = bquote(n*'= '*.(length(unique(df$site_no)))*' gauges'), size=6)+
         scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(10^3, 10^9), breaks=c(1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9))+
         scale_y_log10(guide = "axis_logticks",  labels = scales::label_log(base=10), limits=c(10^3, 10^9), breaks=c(1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9))+
-        scale_fill_brewer(palette='Set2', name='', labels=c('50%', '20%', '10%', '2%'))+
+        scale_fill_manual(name='Flood Probability', labels=c('50%', '20%', '10%', '2%'), values=c('#68b0ab', '#8fc0a9', '#c8d5b9', '#faf3dd'))+
         ylab(bquote(bold('Estimated floodplain flux ['~m^3/dy~']')))+
         xlab(bquote(bold('Observed floodplain flux ['~m^3/dy~']')))+
         labs(tag='A')+
@@ -1410,7 +1499,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
         annotate("text", x = 10^4.5, y = 10^9.5, label = bquote(bold(r^2*':'~.(r2_Q))), size=8, color='black')+
         scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e3, 1e10))+
         scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e3, 1e10))+
-        scale_fill_brewer(palette='Set2', name='Flood Probability', labels=c('50%', '20%', '10%', '2%'))+
+        scale_fill_manual(name='Flood Probability', labels=c('50%', '20%', '10%', '2%'), values=c('#68b0ab', '#8fc0a9', '#c8d5b9', '#faf3dd'))+
         xlab(bquote(bold('Observed '~Q[flood]~'['~m^3*dy^-1~']')))+
         ylab(bquote(bold('Modeled '~Q[flood]~'['~m^3*dy^-1~']')))+
         theme(legend.position='bottom',
@@ -1430,7 +1519,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
         annotate("text", x = 10^2.5, y = 10^8.4, label = bquote(bold(r^2*':'~.(r2_V))), size=8, color='black')+
         scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e1, 1e9))+
         scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e1, 1e9))+
-        scale_fill_brewer(palette='Set2', name='Flood Probability', labels=c('50%', '20%', '10%', '2%'))+
+        scale_fill_manual(name='Flood Probability', labels=c('50%', '20%', '10%', '2%'), values=c('#68b0ab', '#8fc0a9', '#c8d5b9', '#faf3dd'))+
         xlab(bquote(bold('Observed '~V[flood]~'['~m^3~']')))+
         ylab(bquote(bold('Modeled '~V[flood]~'['~m^3~']')))+
         theme(legend.position='bottom',
@@ -1458,7 +1547,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
         annotate("text", x = 10^-3.5, y = 10^3.3, label = bquote(bold(r^2*':'~.(r2))), size=8, color='black')+
         scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e-5, 1e4))+
         scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e-5, 1e4))+
-        scale_fill_brewer(palette='Set2', name='Flood Probability', labels=c('50%', '20%', '10%', '2%'))+
+        scale_fill_manual(name='Flood Probability', labels=c('50%', '20%', '10%', '2%'), values=c('#68b0ab', '#8fc0a9', '#c8d5b9', '#faf3dd'))+
         xlab(bquote(bold('Observed'~tau[flood]~'[hr]')))+
         ylab(bquote(bold('Modeled'~tau[flood]~'[hr]')))+
         theme(legend.position='bottom',
@@ -1527,7 +1616,7 @@ makeMLQFig <- function(trainedModel_Q, modelDF){
         annotate("text", x = 10^4.5, y = 10^9.5, label = bquote(bold(r^2*':'~.(r2_Q))), size=8, color='black')+
         scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e4, 1e10))+
         scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e4, 1e10))+
-        scale_fill_brewer(palette='Set2', name='Flood Probability', labels=c('50%', '20%', '10%', '2%'))+
+        scale_fill_manual(name='Flood Probability', labels=c('50%', '20%', '10%', '2%'), values=c('#68b0ab', '#8fc0a9', '#c8d5b9', '#faf3dd'))+
         xlab(bquote(bold('Observed '~Q[total]~'['~m^3*dy^-1~']')))+
         ylab(bquote(bold('Modeled '~Q[total]~'['~m^3*dy^-1~']')))+
         theme(legend.position='bottom',
@@ -1584,7 +1673,7 @@ makeGageMap <- function(gage_df) {
             color='black',
             pch=21,
             size=4) +
-        annotate("text", x = -119, y = 25.1, label = bquote(.(nrow(gage_shp)/4)~"gages"), size=6)+
+        annotate("text", x = -119, y = 25.1, label = bquote(.(length(unique(gage_shp$site_no)))~"gauges"), size=6)+
         theme(axis.title = element_text(size=26, face='bold'),axis.text = element_text(family="Futura-Medium", size=20))+
         theme(legend.position='bottom')+
         theme(text = element_text(family = "Futura-Medium"),
@@ -1596,7 +1685,7 @@ makeGageMap <- function(gage_df) {
         ylab('')
 
     #write to file
-    ggsave('cache/gageMap.png', map, width=10, height=7)
+    ggsave('cache/gaugeMap.png', map, width=10, height=7)
 
     return(gage_shp)
 }
@@ -1662,4 +1751,460 @@ makeHuc4Map <- function(){
 
     #write to file
     ggsave('cache/huc4s.png', map, width=12, height=10)
+}
+
+
+#' makePhysioMap
+#'
+#' Makes map of 8 physiographic divisions used in study
+#'
+#' @return figure written to file
+makePhysioMap <- function(){
+    library(ggplot2)
+    theme_set(theme_classic())
+
+        #CONUS boundary
+    states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
+    states <- dplyr::filter(states, !(NAME %in% c('Alaska',
+                                                'American Samoa',
+                                                'Commonwealth of the Northern Mariana Islands',
+                                                'Guam',
+                                                'District of Columbia',
+                                                'Puerto Rico',
+                                                'United States Virgin Islands',
+                                                'Hawaii'))) #remove non CONUS states/territories
+
+    #setup regions
+    sf::sf_use_s2(FALSE)
+    regions <- sf::st_read('data/physio.shp') #physiographic regions
+    regions <- fixGeometries(regions)
+    regions <- regions %>%
+        group_by(DIVISION) %>%
+        summarize()
+    regions<- regions[1:8,] #drop NA quirk col from grouping
+
+    regions$DIVISION <- factor(regions$DIVISION, levels=c('PACIFIC MOUNTAIN SYSTEM','INTERMONTANE PLATEAUS',
+                                                        'ROCKY MOUNTAIN SYSTEM','LAURENTIAN UPLAND',
+                                                        'INTERIOR PLAINS','INTERIOR HIGHLANDS',
+                                                        'APPALACHIAN HIGHLANDS','ATLANTIC PLAIN'))
+
+    states <- sf::st_union(states) %>%
+        sf::st_transform(crs=sf::st_crs(regions))
+
+    #plot
+    map <- ggplot(regions) +
+        geom_sf(aes(fill=DIVISION), color='black', linewidth=0) +
+        geom_sf(data=states,color='black',linewidth=1.5,alpha=0) +
+        scale_fill_manual(values=c('#448aff', '#1565c0', '#009688','#8bc34a','#ffc107','#ff9800','#f44336','#ad1457'),name='')+
+        theme(axis.text = element_text(size=22),
+            legend.position='none')
+
+    #write to file
+    ggsave('cache/physio_regions.png', map, width=12, height=8)
+}
+
+
+#' makeInterpretableML
+#'
+#' Makes figure of permutation VIP plots for interpretable ML
+#'
+#' @param model_V_eval workflow result from nested resampling model evaluation scheme: volume
+#' @param model_Qf_eval workflow result from nested resampling model evaluation scheme: Qexc
+#' @param gageForModel_combined: dataframe of predictor features and output variables V and Qexc
+#'
+#' @return figure written to file
+makeInterpretableML <- function(model_V_eval, model_Qf_eval, gageForModel_combined){
+    library(tidymodels)
+    library(ggplot2)
+    theme_set(theme_classic())
+
+    pred_fun <- function(object, newdata){
+        predict(object, newdata)$.pred
+    }
+
+    data_reduced <- gageForModel_combined
+
+    #VOLUME MODEL--------------------
+    trainedModelFin <- model_V_eval
+    scores_fin <- data.frame('variable'=vip::vi(trainedModelFin[[1]]$model, method='permute',target='V_m3',metric='rmse',pred_wrapper = pred_fun,train=data_reduced)$Variable)
+    for(i in 1:length(trainedModelFin)){
+        model <- trainedModelFin[[i]]$model
+        scores <- vip::vi(trainedModelFin[[1]]$model, method='permute',target='V_m3',metric='rmse',pred_wrapper = pred_fun,train=data_reduced) #for lightgbm, this is the coefficient magnitude for each feature, re-scaled to relative percentages. Gain "represents fractional contribution of each feature to the model based on the total gain of this feature's splits"
+            #https://koalaverse.github.io/vip/reference/vi_model.html
+        colnames(scores) <- c('variable', paste0('importance_',i))
+        scores_fin <- scores_fin %>%
+            dplyr::left_join(scores, by='variable')
+    }
+
+    scores_repeatMean <- scores_fin |>
+        dplyr::group_by(variable) |> #dummy group
+        dplyr::summarise(dplyr::across(tidyselect::everything(), mean, na.rm = TRUE))
+
+    scores_cv <- data.frame('variable'=scores_repeatMean$variable,
+                        'ymean'=apply(scores_repeatMean[,-1], 1, function(x){mean(x, na.rm=T)}),
+                        'ymin'=apply(scores_repeatMean[,-1], 1, function(x){min(x, na.rm=T)}),
+                        'ymax'=apply(scores_repeatMean[,-1], 1, function(x){max(x, na.rm=T)}))
+
+    scores_cv <- scores_cv[order(scores_cv$ymean, decreasing = TRUE),]
+    scores_cv <- scores_cv[1:10,]
+    scores_cv$Category <- c('Physiography', 'Physiography',  'Hydrology',             'Physiography',        'Physiography','Climate',           'Climate',            'Climate',           'Climate',            'Climate')
+    scores_cv$variable <- c('Reach length', 'Drainage area', 'Mean annual discharge', 'Unit catchment area', 'Slope',       'Mean Jul. rainfall','Mean Aug. rainfall', 'Mean Apr. rainfall','Mean Sep. rainfall', 'Mean Jun. rainfall')
+
+    vip_permute_V <- ggplot(scores_cv, aes(x=ymean, y=forcats::fct_reorder(variable, ymean), fill=Category))+
+        geom_col(color='black', size=1.2) +
+        geom_errorbar(aes(xmin = ymin, xmax = ymax), width = 0.3, linewidth=1.5, color = "black") +
+        scale_fill_manual(name='',values=c('Hydrology'='#3d405b', 'Anthropogenic'='#e07a5f', 'Climate'='#81b29a','Soils & Geology'='#f6bd60','Physiography'='#f4f1de'))+
+        xlab('Feature Importance') +
+        ylab('') +
+        labs(tag='A')+
+        ggtitle(bquote(V[flood]~model))+
+        theme(axis.title = element_text(size=28, face='bold'),
+            axis.text = element_text(size=22,face='bold'),
+            plot.title=element_text(size=26, hjust=0.5),
+            legend.position=c(0.75, 0.2),
+            legend.text = element_text(size=24),
+            plot.tag = element_text(size=28,face='bold'))
+
+    #QF MODEL--------------------
+    trainedModelFin <- model_Qf_eval
+    scores_fin <- data.frame('variable'=vip::vi(trainedModelFin[[1]]$model, method='permute',target='V_m3',metric='rmse',pred_wrapper = pred_fun,train=data_reduced)$Variable)
+    for(i in 1:length(trainedModelFin)){
+        model <- trainedModelFin[[i]]$model
+        scores <- vip::vi(trainedModelFin[[1]]$model, method='permute',target='V_m3',metric='rmse',pred_wrapper = pred_fun,train=data_reduced) #for lightgbm, this is the coefficient magnitude for each feature, re-scaled to relative percentages. Gain "represents fractional contribution of each feature to the model based on the total gain of this feature's splits"
+            #https://koalaverse.github.io/vip/reference/vi_model.html
+        colnames(scores) <- c('variable', paste0('importance_',i))
+        scores_fin <- scores_fin %>%
+            dplyr::left_join(scores, by='variable')
+    }
+
+    scores_repeatMean <- scores_fin |>
+        dplyr::group_by(variable) |> #dummy group
+        dplyr::summarise(dplyr::across(tidyselect::everything(), mean, na.rm = TRUE))
+
+    scores_cv <- data.frame('variable'=scores_repeatMean$variable,
+                        'ymean'=apply(scores_repeatMean[,-1], 1, function(x){mean(x, na.rm=T)}),
+                        'ymin'=apply(scores_repeatMean[,-1], 1, function(x){min(x, na.rm=T)}),
+                        'ymax'=apply(scores_repeatMean[,-1], 1, function(x){max(x, na.rm=T)}))
+
+    scores_cv <- scores_cv[order(scores_cv$ymean, decreasing = TRUE),]
+    scores_cv <- scores_cv[1:10,]
+    scores_cv$Category <- c('Physiography',  'Hydrology',             'Physiography','Hydrology', 'Climate',           'Climate',              'Physiography',        'Climate',               'Climate',            'Climate')
+    scores_cv$variable <- c('Drainage area', 'Mean annual discharge', 'Stream Order','Flood size','Mean Jul. rainfall','Mean Feb. temperature','Unit catchment area', 'Mean Jan. temperature', 'Mean Jun. rainfall', 'Mean Nov. rainfall')
+
+    vip_permute_Qf <- ggplot(scores_cv, aes(x=ymean, y=forcats::fct_reorder(variable, ymean), fill=Category))+
+        geom_col(color='black', size=1.2) +
+        geom_errorbar(aes(xmin = ymin, xmax = ymax), width = 0.3, linewidth=1.5, color = "black") +
+        scale_y_discrete(position = "right")+
+        scale_fill_manual(name='',values=c('Hydrology'='#3d405b', 'Anthropogenic'='#e07a5f', 'Climate'='#81b29a','Soils & Geology'='#f6bd60','Physiography'='#f4f1de'))+
+        xlab('Feature Importance') +
+        ylab('') +
+        labs(tag='B')+
+        ggtitle(bquote(Q[flood]~model))+
+        theme(axis.title = element_text(size=28, face='bold'),
+            axis.text = element_text(size=22,face='bold'),
+            plot.title=element_text(size=26, hjust=0.5),
+            legend.position=c(0.75, 0.2),
+            legend.text = element_text(size=24),
+            plot.tag = element_text(size=28,face='bold'))
+
+    layout <- "
+    AB
+    "
+
+    comboPlot <- patchwork::wrap_plots(A=vip_permute_V, B=vip_permute_Qf, design=layout , guides='collect') &
+        theme(legend.position='bottom')
+
+    ggsave('cache/interpretML.png', comboPlot,height=10,width=18)
+}
+
+
+#' build_regulatedReachFig
+#'
+#' Makes figure of boxplots comparing regulated reaches to unregulated reaches
+#'
+#' @param regulated_df dataframe result from dam~river joining (see src/functions.R)
+#'
+#' @return figure written to file
+build_regulatedReachFig <- function(regulated_df){
+    library(ggplot2)
+    theme_set(theme_classic())
+
+    combined_other <- regulated_df %>%
+        sf::st_drop_geometry() %>%
+        purrr::map("other_reaches") %>%
+        dplyr::bind_rows() %>%
+        dplyr::mutate(regulation_flag = 'unreg') %>%
+        dplyr::select(c('huc4', 'NHDPlusID', 'regulation_flag', 'prob', 'log10Qexc_m3dy', 'TotDASqKm', 'log10tau_hr', 'LengthKM'))
+
+    combined_regulated <- regulated_df %>%
+        sf::st_drop_geometry() %>%
+        purrr::map("regulated_reaches") %>%
+        dplyr::bind_rows() %>%
+        dplyr::mutate(regulation_flag = 'reg') %>%
+        dplyr::select(c('huc4', 'NHDPlusID', 'regulation_flag', 'prob', 'log10Qexc_m3dy', 'TotDASqKm', 'log10tau_hr', 'LengthKM'))
+
+    forPlot <- rbind(combined_other, combined_regulated)
+    forPlot <- forPlot %>%
+        sf::st_drop_geometry()
+
+    forPlot$prob_lab <- ifelse(forPlot$prob == 0.02, "2%",
+                                    ifelse(forPlot$prob == 0.1, "10%",
+                                        ifelse(forPlot$prob == 0.2, "20%",
+                                            ifelse(forPlot$prob == 0.5, "50%", NA))))
+    forPlot$prob_lab <- factor(forPlot$prob_lab, levels=c('2%', '10%', '20%', '50%'))
+
+    boxplots_tau <- ggplot(forPlot, aes(fill=regulation_flag, y=10^(log10tau_hr)/LengthKM, x=factor(prob_lab)))+
+        geom_boxplot(color='black') +
+        scale_fill_brewer(palette='Set2', name='', labels=c('Upstream dam', 'No upstream dam'))+
+        scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10))+
+        xlab('Flood recurrence interval')+
+        ylab(bquote(bold(tau[flood]~'['*hr^1~km^-1*']')))+
+        theme(legend.position='bottom',
+            axis.text=element_text(size=20),
+            axis.title = element_text(size=22, face='bold'),
+            legend.text=element_text(size=20),
+            legend.title=element_text(size=22),
+            plot.tag = element_text(size=26,face='bold'))
+
+    boxplots_Qf <- ggplot(forPlot, aes(fill=regulation_flag, y=10^(log10Qexc_m3dy)/(TotDASqKm*1e6), x=factor(prob_lab)))+
+        geom_boxplot(color='black') +
+        scale_fill_brewer(palette='Set2', name='', labels=c('Upstream dam', 'No upstream dam'))+
+        scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10))+
+        xlab('Flood recurrence interval')+
+        ylab(bquote(bold(Q[flood]~'/drainage area'~'['~m^1*dy^-1*']')))+
+        theme(legend.position='bottom',
+            axis.text=element_text(size=20),
+            axis.title = element_text(size=22, face='bold'),
+            legend.text=element_text(size=20),
+            legend.title=element_text(size=22),
+            plot.tag = element_text(size=26,face='bold'))
+
+    ggsave('cache/regulation_tau.png', boxplots_tau)
+    ggsave('cache/regulation_Qf.png', boxplots_Qf)
+
+    #save for summary stats
+    out <- forPlot %>%
+        dplyr::group_by(regulation_flag, prob) %>%
+        dplyr::summarize(medianTau_hr_km = median(10^(log10tau_hr)/LengthKM),
+                        medianQexc_m_dy = median(10^(log10Qexc_m3dy)/(TotDASqKm*1e6)))
+    
+    return(out)
+}
+
+
+#' sw_makeMLValFig
+#'
+#' Makes figure of southwestern ml validation
+#'
+#' @param trainedModel_Q workflow result from nested resampling model evaluation scheme: Qexc
+#' @param trainedModel_V workflow result from nested resampling model evaluation scheme: volume
+#' @param modelDF dataframe of training gauges
+#' @param gages_df_combined dataframe of gauges with huc4 codes to filter for southwestern sites
+#'
+#' @return figure written to file
+sw_makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF, gages_df_combined){
+    library(tidymodels)
+    library(ggplot2)
+    theme_set(theme_classic())
+
+    gages_df_combined <- gages_df_combined %>%
+        dplyr::select(c('site_no', 'huc4')) %>%
+        dplyr::distinct()
+    modelDF <- modelDF %>%
+        dplyr::left_join(gages_df_combined, by=c('GageID'='site_no'))
+
+    # Q model wrangle
+    full_predictions_Q <- data.frame()
+    for(i in 1:length(trainedModel_Q)){
+        results <- trainedModel_Q[[i]]$summary %>% collect_predictions()
+        results$fold <- i
+        results <- results %>%
+            dplyr::relocate(fold)
+        full_predictions_Q <- rbind(full_predictions_Q, results)
+    }
+
+    full_predictions_Q$huc4 <- modelDF[full_predictions_Q$.row,]$huc4
+    full_predictions_Q <- full_predictions_Q %>%
+        dplyr::filter(substr(huc4,1,2) %in% c('13', '15'))
+
+    #V model wrangle
+    full_predictions_V <- data.frame()
+    for(i in 1:length(trainedModel_V)){
+        results <- trainedModel_V[[i]]$summary %>% collect_predictions()
+        results$fold <- i
+        results <- results %>%
+            dplyr::relocate(fold)
+        full_predictions_V <- rbind(full_predictions_V, results)
+    }
+
+    full_predictions_V$huc4 <- modelDF[full_predictions_V$.row,]$huc4
+    full_predictions_V <- full_predictions_V %>%
+        dplyr::filter(substr(huc4,1,2) %in% c('13', '15'))
+
+    #add flow prob for plotting
+    modelDF$.row <- row_number(modelDF)
+    modelDF <- modelDF %>%
+        dplyr::select(c('.row', 'prob'))
+
+    full_predictions_Q <- full_predictions_Q %>%
+        dplyr::left_join(modelDF, by='.row') %>%
+        dplyr::filter(is.na(prob)==0)
+    
+    full_predictions_V <- full_predictions_V %>%
+        dplyr::left_join(modelDF, by='.row') %>%
+        dplyr::filter(is.na(prob)==0)
+
+    #plot
+    full_predictions_Q$prob <- factor(full_predictions_Q$prob, levels=c(0.50, 0.20, 0.10, 0.02))
+    r2_Q <- round(summary(lm(.pred~Qexc_m3dy, data=full_predictions_Q))$r.squared,2)
+    scatter_Q <- ggplot(full_predictions_Q, aes(x=10^(Qexc_m3dy), y=10^(.pred))) + #natural space so we can use scale_log10
+        geom_abline(linetype='dashed', color='darkgrey', linewidth=1.75) +
+        geom_point(aes(fill=factor(prob)), pch=21, size=8, color='black')+
+        geom_smooth(method='lm', se=F, linewidth=2, color='black', show.legend = FALSE)+
+        annotate("text", x = 10^4.5, y = 1e10, label = bquote(bold(n:~.(nrow(full_predictions_Q)))), size=8, color='black')+
+        annotate("text", x = 10^4.5, y = 10^9.5, label = bquote(bold(r^2*':'~.(r2_Q))), size=8, color='black')+
+        scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e3, 1e10))+
+        scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e3, 1e10))+
+        scale_fill_manual(name='Flood Probability', labels=c('50%', '20%', '10%', '2%'), values=c('#68b0ab', '#8fc0a9', '#c8d5b9', '#faf3dd'))+
+        xlab(bquote(bold('Observed '~Q[flood]~'['~m^3*dy^-1~']')))+
+        ylab(bquote(bold('Modeled '~Q[flood]~'['~m^3*dy^-1~']')))+
+        theme(legend.position='bottom',
+            legend.title=element_text(size=26),
+            legend.text=element_text(size=22),
+            axis.title=element_text(size=24),
+            axis.text = element_text(size=22),
+            panel.border=element_rect(colour="black",size=1, fill=NA))
+
+    full_predictions_V$prob <- factor(full_predictions_V$prob, levels=c(0.50, 0.20, 0.10, 0.02))
+    r2_V <- round(summary(lm(.pred~V_m3, data=full_predictions_V))$r.squared,2)
+    scatter_V <- ggplot(full_predictions_V, aes(x=10^(V_m3), y=10^(.pred))) + #natural space so we can use scale_log10
+        geom_abline(linetype='dashed', color='darkgrey', linewidth=1.75) +
+        geom_point(aes(fill=factor(prob)),pch=21, size=8, color='black')+
+        geom_smooth(method='lm', se=F, linewidth=2, color='black', show.legend = FALSE)+
+        annotate("text", x = 10^2.5, y = 1e9, label = bquote(bold(n:~.(nrow(full_predictions_V)))), size=8, color='black')+
+        annotate("text", x = 10^2.5, y = 10^8.4, label = bquote(bold(r^2*':'~.(r2_V))), size=8, color='black')+
+        scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e1, 1e9))+
+        scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e1, 1e9))+
+        scale_fill_manual(name='Flood Probability', labels=c('50%', '20%', '10%', '2%'), values=c('#68b0ab', '#8fc0a9', '#c8d5b9', '#faf3dd'))+
+        xlab(bquote(bold('Observed '~V[flood]~'['~m^3~']')))+
+        ylab(bquote(bold('Modeled '~V[flood]~'['~m^3~']')))+
+        theme(legend.position='bottom',
+            legend.title=element_text(size=26),
+            legend.text=element_text(size=22),
+            axis.title=element_text(size=24),
+            axis.text = element_text(size=22),
+            panel.border=element_rect(colour="black",size=1, fill=NA))
+
+    #combine for tau
+    full_predictions <- full_predictions_Q %>%
+        dplyr::select(!prob)%>%
+        dplyr::left_join(full_predictions_V, by='.row') %>%
+        dplyr::mutate(log10tau_hr = (V_m3 - Qexc_m3dy) + log10(24),
+                    log10tau_hr.pred = (.pred.y - .pred.x) + log10(24)) %>%
+        tidyr::drop_na()
+
+    r2 <- round(summary(lm(log10tau_hr.pred~log10tau_hr, data=full_predictions))$r.squared,2)
+    full_predictions$prob <- factor(full_predictions$prob, levels=c(0.50, 0.20, 0.10, 0.02))
+    scatter_tau <- ggplot(full_predictions, aes(x=10^(log10tau_hr), y=10^(log10tau_hr.pred))) + #natural space so we can use scale_log10
+        geom_abline(linetype='dashed', color='darkgrey', linewidth=1.75) +
+        geom_point(aes(fill=factor(prob)),pch=21, size=8, color='black')+
+        geom_smooth(method='lm', se=F, linewidth=2, color='black',show.legend = FALSE)+
+        annotate("text", x = 10^-3.5, y = 10^4, label = bquote(bold(n:~.(nrow(full_predictions)))), size=8, color='black')+
+        annotate("text", x = 10^-3.5, y = 10^3.3, label = bquote(bold(r^2*':'~.(r2))), size=8, color='black')+
+        scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e-5, 1e4))+
+        scale_y_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(1e-5, 1e4))+
+        scale_fill_manual(name='Flood Probability', labels=c('50%', '20%', '10%', '2%'), values=c('#68b0ab', '#8fc0a9', '#c8d5b9', '#faf3dd'))+
+        xlab(bquote(bold('Observed'~tau[flood]~'[hr]')))+
+        ylab(bquote(bold('Modeled'~tau[flood]~'[hr]')))+
+        theme(legend.position='bottom',
+            legend.title=element_text(size=26),
+            legend.text=element_text(size=22),
+            axis.title=element_text(size=24),
+            axis.text = element_text(size=22),
+            panel.border=element_rect(colour="black",size=1, fill=NA))
+
+    #write to file
+    layout <- "
+        ABC
+    "
+
+    comboPlot <- patchwork::wrap_plots(A=scatter_Q, B=scatter_V, C=scatter_tau, design=layout , guides='collect') &
+        theme(legend.position='bottom')
+
+    ggsave('cache/sw_internal_review_validationML.png', comboPlot, width=20, height=8)
+}
+
+
+#' sw_makeCalculationValFig
+#'
+#' Makes figure of southwest US ml model validation
+#' 
+#' @param gageQexc_val list of dataframes of gauged flood events with observed (measured) bankfull discharge. For validation.
+#' @param gages_df_combined dataframe of streamgauges joined to huc4 basins (for southwest filtering) 
+#'
+#' @return figure written to file
+sw_makeCalculationValFig <- function(gageQexc_val, gages_df_combined){    
+    library(ggplot2)
+    theme_set(theme_classic())
+
+    gages_df_combined <- gages_df_combined %>%
+        dplyr::select(c('site_no', 'huc4')) %>%
+        dplyr::distinct()
+
+    #wrangle
+    gageDF_02 <- dplyr::bind_rows(gageQexc_val) %>%
+        dplyr::filter(Qexc_m3dy > 0) %>%
+        dplyr::mutate(prob = 0.02)
+    
+    gageDF_10 <- dplyr::bind_rows(gageQexc_val) %>%
+        dplyr::filter(Qexc_m3dy > 0) %>%
+        dplyr::mutate(prob = 0.10)
+
+    gageDF_20 <- dplyr::bind_rows(gageQexc_val) %>%
+        dplyr::filter(Qexc_m3dy > 0) %>%
+        dplyr::mutate(prob = 0.20)
+
+    gageDF_50 <- dplyr::bind_rows(gageQexc_val) %>%
+        dplyr::filter(Qexc_m3dy > 0) %>%
+        dplyr::mutate(prob = 0.50)
+
+    gageDF <- rbind(gageDF_02, gageDF_10, gageDF_20, gageDF_50)
+    gageDF <- gageDF %>%
+        dplyr::left_join(gages_df_combined, by='site_no') %>%
+        dplyr::filter(substr(huc4,1,2) %in% c('13','15'))
+
+    #join obs and model datasets
+    df <- gageDF %>%
+        dplyr::group_by(site_no, prob, flag)%>%
+        dplyr::summarise(Qexc_m3dy = quantile(Qexc_m3dy, 1-prob, na.rm=T)) %>%
+        dplyr::distinct() %>%
+        dplyr::filter(Qexc_m3dy > 0) %>%
+        tidyr::pivot_wider(id_cols=c(site_no, prob), names_from=flag, values_from=c('Qexc_m3dy')) %>%
+        tidyr::drop_na() #remove gages with no modeled flows (and a handful of 'gages' with no flow within our time record)
+
+    #plot
+    lm <- lm(log10(model)~log10(obs), data=df)
+    df$prob <- factor(df$prob, levels=c(0.50, 0.20, 0.10, 0.02))
+    plot1 <- ggplot(df, aes(x=obs, y= model)) +
+        geom_abline(linewidth=2, color='darkgrey', linetype='dashed') +
+        geom_point(aes( fill=prob), pch=21, size=10, color='black') +
+        geom_smooth(method='lm', se=F, color='black', linewidth=2)+
+        annotate("text", x = 10^4, y = 10^9, label = bquote(R^2*'= '*.(round(summary(lm)$r.squared,2))), size=6)+
+        annotate("text", x = 10^4, y = 10^8.65, label = bquote(n*'= '*.(length(unique(df$site_no)))*' gauges'), size=6)+
+        scale_x_log10(guide = "axis_logticks", labels = scales::label_log(base=10), limits=c(10^3, 10^9), breaks=c(1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9))+
+        scale_y_log10(guide = "axis_logticks",  labels = scales::label_log(base=10), limits=c(10^3, 10^9), breaks=c(1e3, 1e4, 1e5, 1e6, 1e7,1e8,1e9))+
+        scale_fill_manual(name='Flood Probability', labels=c('50%', '20%', '10%', '2%'), values=c('#68b0ab', '#8fc0a9', '#c8d5b9', '#faf3dd'))+
+        ylab(bquote(bold('Estimated floodplain flux ['~m^3/dy~']')))+
+        xlab(bquote(bold('Observed floodplain flux ['~m^3/dy~']')))+
+        labs(tag='A')+
+        theme(axis.title = element_text(size=20, face='bold'))+
+        theme(legend.position=c(0.8,0.2),
+            panel.border=element_rect(colour="black",size=1, fill=NA),
+            axis.line = element_blank())+
+        theme(axis.text = element_text(family = "Futura-Medium", size=18),
+            legend.text = element_text(family = "Futura-Medium", size = 16),
+            plot.tag = element_text(size=26,
+                                    face='bold'))
+
+    ggsave('cache/sw_internal_review_validation_calculation.png', plot1, width=9, height=9)
 }

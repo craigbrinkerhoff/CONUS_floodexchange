@@ -1,6 +1,6 @@
 # _targets.R file
 # Craig Brinkerhoff
-# Winter 2026
+# Spring 2026
 # Master pipeline for floodwater residence time study
 
 #necessary global packages for pipelining.
@@ -32,9 +32,13 @@ nOuterFolds <- 5
 numGrid <- 50
 numRepeats <- 1
 
+#dam joining parameters
+perc_thresh <- 0.20 #maximum allowable % difference between dam and river reported drainage area
+buffer_dist <- 10000 #radius buffer around dam to search for optimal river~dam matchup [m2]
+
 ###### DISTRIBUTED COMPUTING SETUP ######
 # tar_option_set(
-#   controller = crew_controller_local(workers = 9)
+#   controller = crew_controller_local(workers = 8)
 # )
 
 vol_grids <- list.files('data/path_to_data/CONUS_connectivity_data/volume_validation/', pattern = "\\.tif$", full.names=TRUE)
@@ -75,11 +79,11 @@ gageAnalysis <- tar_map(
   tar_target(depthAHG, buildDepthAHG(gage, minADCPMeas),
             pattern=map(gage),
             iteration='list'),
-  tar_target(gagePrepped, prepBankfullHydraulics('deploy', gageRecord, gage, BHGmodel_jacknife, BHGmodel, minAHGr2, gageRecordStart, gageRecordEnd)),
+  tar_target(gagePrepped, prepBankfullHydraulics('deploy', gageRecord, gage, BHGmodel_jacknife, BHGmodel)),
   tar_target(allGages, grabAllGages(huc4)),
 
   ## CALCULATE FLOOD VOLUME & DISCHARGE AT GAGE
-  tar_target(gageQexc, calc_Qexc('deploy', gageRecord, gagePrepped, depthAHG),
+  tar_target(gageQexc, calc_Qexc('deploy', gageRecord, gagePrepped, depthAHG, minAHGr2),
             pattern=map(gageRecord),
             iteration='list'),
   tar_target(gageFlux, buildGageFloodFunctions(huc4, BHGmodel, gageQexc, min_floods)),
@@ -93,6 +97,7 @@ gageAnalysis <- tar_map(
   tar_target(basinPredictions, predictBasin(huc4, conusForModel, model_Qf, model_V, model_Q)),
   tar_target(basinSummarySO, summarizeBasinSO(huc4, basinPredictions)),
   tar_target(basinSummary, summarizeBasin(huc4, basinPredictions)),
+  tar_target(regulatedReachPreds, findRegulatedReaches(huc4, basinPredictions, perc_thresh, buffer_dist)),
   tar_target(nReaches, tallyReaches(basinPredictions)),
 
   ## PREP FOR MAPPING
@@ -106,7 +111,10 @@ gageAnalysis <- tar_map(
   tar_target(reaches_val, collectValReaches(huc4)),
   tar_target(depths_val, wrangleDepthGrids(huc4, reaches_val, volVal)),
   tar_target(gageFlux_val, buildGageFloodFunctions_volumeval(huc4, BHGmodel, depths_val)),
-  tar_target(gageVolume_val, runDEMModel(huc4, gageFlux_val))
+  tar_target(gageVolume_val, runDEMModel(huc4, gageFlux_val)),
+
+  ## WRITE TO FILE
+  tar_target(results, writeToFile(huc4, basinPredictions))
 )
 
 
@@ -115,6 +123,9 @@ list(
   ## PREP BANKFULL MODELS AND DATA
   tar_target(BHGdata, dataBHG()),
   tar_target(BHGmodel, modelsBHG()),
+
+  ## PREP HUC4 REGIONS
+  tar_target(basin_regions, assignRegion()),
 
   ## PREP VALIDATION DATA
   tar_target(volVal, assignVolVals(vol_grids)),
@@ -130,6 +141,7 @@ list(
   tar_target(gagesDF, cleanUpGages(gages_df_combined, modelDF)),
   tar_combine(allGages_combined, gageAnalysis$allGages, command = dplyr::bind_rows(!!!.x)),
   tar_combine(nReaches_combined, gageAnalysis$nReaches, command = vctrs::vec_c(!!!.x)),
+  tar_combine(regulatedReachPreds_combined, gageAnalysis$regulatedReachPreds, command = list(!!!.x)),
 
   ## TRAIN ML MODELS
   tar_target(model_V_eval, trainModelEval_V(modelDF, nInnerFolds, nOuterFolds, numGrid, numRepeats)),
@@ -159,8 +171,8 @@ list(
   tar_target(depthAHG_val, buildDepthAHG(gage_val, minADCPMeas),
           pattern=map(gage_val),
           iteration='list'),
-  tar_target(gagePrepped_val, prepBankfullHydraulics('val', gageRecord_val, gage_val, BHGmodel_jacknife, BHGmodel, minAHGr2, gageRecordStart, gageRecordEnd)),
-  tar_target(gageQexc_val, calc_Qexc('val', gageRecord_val, gagePrepped_val, depthAHG_val),
+  tar_target(gagePrepped_val, prepBankfullHydraulics('val', gageRecord_val, gage_val, BHGmodel_jacknife, BHGmodel)),
+  tar_target(gageQexc_val, calc_Qexc('val', gageRecord_val, gagePrepped_val, depthAHG_val, minAHGr2),
           pattern=map(gageRecord_val),
           iteration='list'),
 
@@ -168,12 +180,19 @@ list(
   tar_target(fig_validationML, makeMLValFig(model_Qf_eval, model_V_eval, modelDF)),
   tar_target(fig_reachTauMap, makeReachMap(basinsList_02, basinsList_10, basinsList_20, basinsList_50)),
   tar_target(fig_reachTauMap_insets, makeReachMapInset(mapTau_50_0205, mapTau_50_0206, mapTau_50_0207, mapTau_50_0208, mapTau_50_0502, mapTau_50_0503, mapTau_50_0501, mapTau_50_0505)),
-  tar_target(fig_streamorder, makeReachBoxplotsFig(combined_basinSummarySO)),
-  tar_target(fig_basinExchange, makeBasinExchangeMap(combined_basinSummary)),
+  tar_target(fig_Tau, makeTauFigure(combined_basinSummarySO, combined_basinSummary, basin_regions)),
+  tar_target(fig_Qexc, makeQexcFigure(combined_basinSummary, basin_regions)),
+  tar_target(fig_regulation, build_regulatedReachFig(regulatedReachPreds_combined)),
 
   ## EXTENDED FIGURES
   tar_target(fig_validationCalculation, makeCalculationValFig(gageVolume_val_combined, gageQexc_val)),
   tar_target(fig_gageMap, makeGageMap(gagesDF)),
   tar_target(fig_totalQVal, makeMLQFig(model_Q_eval, modelDF)),
-  tar_target(fig_huc4s, makeHuc4Map())
+  tar_target(fig_huc4s, makeHuc4Map()),
+  tar_target(fig_physioMap, makePhysioMap()),
+  tar_target(fig_interpretML, makeInterpretableML(model_V_eval, model_Qf_eval,gageForModel_combined)), #INCLUDES HARDCODED PLOT LABELS
+
+  ## FOR REVIEW
+  tar_target(fig_sw_MLVal, sw_makeMLValFig(model_Qf_eval, model_V_eval, modelDF, gages_df_combined)),
+  tar_target(fig_sw_CalcVal, sw_makeCalculationValFig(gageQexc_val, gages_df_combined))
 )
