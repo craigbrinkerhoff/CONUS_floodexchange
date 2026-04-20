@@ -3,11 +3,9 @@
 ## Spring 2026
 
 
-
-
 #' makeQexcFigure
 #'
-#' Makes basin flood discharge map and physio region plots
+#' Make basin flood discharge map and physio region plots
 #' 
 #' @param combined_basinSummary dataframe of basin Qflood and total Q and fraction of flow in floodplain
 #'
@@ -28,7 +26,7 @@ makeQexcFigure <- function(combined_basinSummary, basin_regions){
                                                 'United States Virgin Islands',
                                                 'Hawaii'))) #remove non CONUS states/territories
 
-    #regional basin ids
+    #regional basin ids (huc4s)
     hucs <- c('0101', '0102', '0103', '0104', '0105', '0106', '0107', '0108', '0109', '0110',
         '0202', '0203', '0204', '0205', '0206', '0207', '0208',
         '0301', '0302', '0303', '0304', '0305', '0306', '0307', '0308', '0309', '0310', '0311', '0312', '0313', '0314', '0315', '0316', '0317', '0318',
@@ -60,7 +58,7 @@ makeQexcFigure <- function(combined_basinSummary, basin_regions){
         sf::st_intersection(states)
 
     #add model results
-    combined_basinSummary <- combined_basinSummary$out %>%
+    combined_basinSummary <- combined_basinSummary %>%
         dplyr::select(c('huc4','prob', 'total_exchange_frac')) %>%
         tidyr::drop_na(total_exchange_frac)
 
@@ -68,6 +66,7 @@ makeQexcFigure <- function(combined_basinSummary, basin_regions){
         dplyr::left_join(combined_basinSummary, by='huc4') %>%
         tidyr::drop_na(total_exchange_frac)
     
+    #update labels for plots
     basins$prob_lab <- ifelse(basins$prob == 0.02, "2% flood recurrence scenario",
                                     ifelse(basins$prob == 0.1, "10% flood recurrence scenario",
                                         ifelse(basins$prob == 0.2, "20% flood recurrence scenario",
@@ -109,6 +108,7 @@ makeQexcFigure <- function(combined_basinSummary, basin_regions){
     
     label_cols <- c('#448aff', '#1565c0', '#009688','#8bc34a','#ffc107','#ff9800','#f44336','#ad1457')
 
+    #regional stats plot
     regional_boxplots <- ggplot(forPlot)+
         geom_boxplot(aes(y=DIVISION, x=total_exchange_frac*100, fill=factor(prob_lab)), color='black') +
         scale_fill_manual(values=c('Channel'='#ad6a6c', '2%'='#faf3dd', '10%'='#c8d5b9', '20%'='#8fc0a9', '50%'='#68b0ab'), name='Flood size') +
@@ -124,6 +124,7 @@ makeQexcFigure <- function(combined_basinSummary, basin_regions){
             legend.title=element_text(size=22),
             plot.tag = element_text(size=26,face='bold'))
 
+    #build combo plot
     layout <- "
     A
     B
@@ -139,7 +140,7 @@ makeQexcFigure <- function(combined_basinSummary, basin_regions){
 
 #' makeReachMap
 #'
-#' Makes figure of CONUS model results
+#' Make figure of CONUS model results
 #' 
 #' @param basinsList_02 list of basin sf mapping objects for 2% flood
 #' @param basinsList_10 list of basin sf mapping objects for 10% flood
@@ -170,7 +171,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
     basinsList_20 <- Filter(function(x) dim(x)[1] > 0, basinsList_20)
     basinsList_50 <- Filter(function(x) dim(x)[1] > 0, basinsList_50)
 
-    #plot
+    #plot 2% flood
     map_02 <- ggplot() +
             geom_sf(data=basinsList_02[[1]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_02[[2]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
@@ -392,6 +393,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
                 panel.border=element_rect(colour="black",size=1, fill=NA))+
             guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 8), title.position = "top", title.hjust = 0.5))
 
+        #plot 10% flood
         map_10 <- ggplot() +
             geom_sf(data=basinsList_10[[1]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_10[[2]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
@@ -613,6 +615,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
                 panel.border=element_rect(colour="black",size=1, fill=NA))+
             guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 8), title.position = "top", title.hjust = 0.5))
 
+        #plot 50% flood
         map_50 <- ggplot() +
             geom_sf(data=basinsList_50[[1]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_50[[2]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
@@ -834,8 +837,8 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
                 panel.border=element_rect(colour="black",size=1, fill=NA))+
             guides(color = guide_legend(nrow = 1, override.aes = list(linewidth = 8), title.position = "top", title.hjust = 0.5))
 
-
-    map_20 <- ggplot() +
+        #plot 20% flood
+        map_20 <- ggplot() +
             geom_sf(data=basinsList_20[[1]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_20[[2]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
             geom_sf(data=basinsList_20[[3]], aes(color= tau_col), linewidth = 0.25,show.legend = "line") +
@@ -1080,7 +1083,7 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
                 linewidth=3,
                 alpha=0)
 
-    #write to file
+    #build combo plot
     layout <- "
         AB
         CD
@@ -1090,13 +1093,14 @@ makeReachMap <- function(basinsList_02, basinsList_10, basinsList_20, basinsList
         theme(legend.position='bottom',
             legend.title = element_text(size = 28))
 
+    #write to file
     ggsave('cache/reachTauMap.png', combo_plot, width=18, height=12)
 }
 
 
 #' makeReachMapInset
 #'
-#' Makes basin flood discharge map insets
+#' Make basin flood discharge map insets
 #' 
 #' @param map_0205 premade sf object for mapping basin
 #' @param map_0206 premade sf object for mapping basin
@@ -1232,13 +1236,14 @@ makeReachMapInset <- function(map_0205, map_0206,map_0207,map_0208,map_0502, map
         theme(legend.position='none',
             panel.background = element_rect(fill = "black"))
 
-    # write to file
+    #build combo plot
     design <- "
     CDE
     "
 
     comboPlot <- patchwork::wrap_plots(C=inset3, D=inset2, E=inset1, design=design)
 
+    # write to file
 	ggsave(filename="cache/reachTauMap_inset.png",plot=comboPlot,width=20,height=5)
 
 	return('written to file')
@@ -1247,7 +1252,7 @@ makeReachMapInset <- function(map_0205, map_0206,map_0207,map_0208,map_0502, map
 
 #' makeTauFigure
 #'
-#' Makes figure of CONUS model results by stream order and physio region
+#' Make figure of CONUS model results by stream order and physio region
 #' 
 #' @param combined_basinSummarySO basin stream order summary dataframe
 #'
@@ -1270,6 +1275,7 @@ makeTauFigure <- function(combined_basinSummarySO, combined_basinSummary, basin_
 
     forPlot <- rbind(forPlot, channel)
 
+    #prep labels for plot
     forPlot$prob_lab <- ifelse(forPlot$prob == 0.02, "2% flood",
                                     ifelse(forPlot$prob == 0.1, "10% flood",
                                         ifelse(forPlot$prob == 0.2, "20% flood",
@@ -1277,6 +1283,7 @@ makeTauFigure <- function(combined_basinSummarySO, combined_basinSummary, basin_
                                                 ifelse(forPlot$prob == -999, "Channel", NA)))))
     forPlot$prob_lab <- factor(forPlot$prob_lab, levels=c('Channel', '2% flood', '10% flood', '20% flood', '50% flood'))
 
+    #plot stream order boxplot distributions
     boxplot_all <- ggplot()+
         geom_boxplot(data=forPlot, aes(x=factor(StreamCalc), y=median_tau_hr_km, fill=prob_lab), color='black') +
         scale_fill_manual(values=c('#ad6a6c', '#faf3dd', '#c8d5b9', '#8fc0a9', '#68b0ab'), name='') +
@@ -1289,12 +1296,12 @@ makeTauFigure <- function(combined_basinSummarySO, combined_basinSummary, basin_
             axis.title = element_text(size=22, face='bold'),
             legend.text=element_text(size=20),
             plot.tag = element_text(size=26,face='bold'))
-    
 
     #REGIONAL SPATIAL ANALYSIS 
-    forPlot <- combined_basinSummary$out %>%
+    forPlot <- combined_basinSummary %>%
         dplyr::left_join(basin_regions, by='huc4')
 
+    #prep labels for plot
     forPlot$prob_lab <- ifelse(forPlot$prob == 0.02, "2%",
                                     ifelse(forPlot$prob == 0.1, "10%",
                                         ifelse(forPlot$prob == 0.2, "20%",
@@ -1309,6 +1316,7 @@ makeTauFigure <- function(combined_basinSummarySO, combined_basinSummary, basin_
 
     label_cols <- c('#448aff', '#1565c0', '#009688','#8bc34a','#ffc107','#ff9800','#f44336','#ad1457')
 
+    #plot regional boxplot distributions
     regional_boxplots <- ggplot(forPlot)+
         geom_boxplot(aes(y=DIVISION, x=median_tau_hr_km, fill=factor(prob_lab)), color='black') +
         scale_fill_manual(values=c('Channel'='#ad6a6c', '2%'='#faf3dd', '10%'='#c8d5b9', '20%'='#8fc0a9', '50%'='#68b0ab'), name='Flood size') +
@@ -1324,7 +1332,7 @@ makeTauFigure <- function(combined_basinSummarySO, combined_basinSummary, basin_
             legend.title=element_text(size=22),
             plot.tag = element_text(size=26,face='bold'))
     
-    # write to file
+    # build combo plot
     design <- "
     A
     B
@@ -1332,6 +1340,7 @@ makeTauFigure <- function(combined_basinSummarySO, combined_basinSummary, basin_
 
     comboPlot <- patchwork::wrap_plots(A=patchwork::free(boxplot_all), B=regional_boxplots, design=design)
 
+    #write to file
     ggsave('cache/tauFig.png', comboPlot, width=12, height=18)
 
     return(forPlot)
@@ -1340,7 +1349,7 @@ makeTauFigure <- function(combined_basinSummarySO, combined_basinSummary, basin_
 
 #' makeCalculationValFig
 #'
-#' Makes figure of gage calculation experiment
+#' Make figure of gage calculation experiment
 #' 
 #' @param gageVolume_val_combined hydrodynamic inundation simulation experiment results dataframe
 #' @param gageQexc_val Q_flood calculation experiment results dataframe
@@ -1350,7 +1359,7 @@ makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){
     library(ggplot2)
     theme_set(theme_classic())
 
-    #wrangle
+    #wrangle different sized floods
     gageDF_02 <- dplyr::bind_rows(gageQexc_val) %>%
         dplyr::filter(Qexc_m3dy > 0) %>%
         dplyr::mutate(prob = 0.02)
@@ -1376,9 +1385,9 @@ makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){
         dplyr::distinct() %>%
         dplyr::filter(Qexc_m3dy > 0) %>%
         tidyr::pivot_wider(id_cols=c(site_no, prob), names_from=flag, values_from=c('Qexc_m3dy')) %>%
-        tidyr::drop_na() #remove gages with no modeled flows (and a handful of 'gages' with no flow within our time record)
+        tidyr::drop_na() #remove gauges with no modeled flows (and a handful of 'gauges' with no flow within our time record)
 
-    #plot
+    #plot Qexc comparison
     lm <- lm(log10(model)~log10(obs), data=df)
     df$prob <- factor(df$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     plot1 <- ggplot(df, aes(x=obs, y= model)) +
@@ -1406,7 +1415,7 @@ makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){
     #There happens to be a gage on an adjacent reach, so it gets picked up. But USGS only simulates ~100m of a 12km reach, so complete mismatch. See qgis file for specifics.
     forPlot <- gageVolume_val_combined[gageVolume_val_combined$NHDPlusID != '60002600017895',]
 
-    #plot
+    #plot Vflood comparison
     lm <- lm(log10(V_m3)~log10(V_usgs_m3), data=forPlot)
     plot2 <- ggplot(forPlot, aes(x=V_usgs_m3, y=V_m3))+
         geom_abline(linewidth=2, color='darkgrey', linetype='dashed') +
@@ -1428,13 +1437,14 @@ makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){
             plot.tag = element_text(size=26,
                                     face='bold'))
 
-    #write to file
+    #build combo plot
     layout <- "
     AB
     "
 
     combo_plot <- patchwork::wrap_plots(A=plot1, B=plot2, design=layout)
 
+    #write to file
     ggsave('cache/validation_calculation.png', combo_plot, width=16, height=8)
 
     return(forPlot)
@@ -1443,7 +1453,7 @@ makeCalculationValFig <- function(gageVolume_val_combined, gageQexc_val){
 
 #' makeMLValFig
 #'
-#' Makes figure of CONUS model validation
+#' Make figure of CONUS model validation
 #' 
 #' @param trainedModel_Q trained model for Q_flood
 #' @param trainedModel_V trained model for V_flood
@@ -1488,7 +1498,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
         dplyr::left_join(modelDF, by='.row') %>%
         dplyr::filter(is.na(prob)==0)
 
-    #plot
+    #plot Qflood ml comparison
     full_predictions_Q$prob <- factor(full_predictions_Q$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     r2_Q <- round(summary(lm(.pred~Qexc_m3dy, data=full_predictions_Q))$r.squared,2)
     scatter_Q <- ggplot(full_predictions_Q, aes(x=10^(Qexc_m3dy), y=10^(.pred))) + #natural space so we can use scale_log10
@@ -1509,6 +1519,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
             axis.text = element_text(size=22),
             panel.border=element_rect(colour="black",size=1, fill=NA))
 
+    #plot Vlood ml comparison
     full_predictions_V$prob <- factor(full_predictions_V$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     r2_V <- round(summary(lm(.pred~V_m3, data=full_predictions_V))$r.squared,2)
     scatter_V <- ggplot(full_predictions_V, aes(x=10^(V_m3), y=10^(.pred))) + #natural space so we can use scale_log10
@@ -1537,6 +1548,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
                     log10tau_hr.pred = (.pred.y - .pred.x) + log10(24)) %>%
         tidyr::drop_na()
 
+    #plot tau_flood ml comparison
     r2 <- round(summary(lm(log10tau_hr.pred~log10tau_hr, data=full_predictions))$r.squared,2)
     full_predictions$prob <- factor(full_predictions$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     scatter_tau <- ggplot(full_predictions, aes(x=10^(log10tau_hr), y=10^(log10tau_hr.pred))) + #natural space so we can use scale_log10
@@ -1557,7 +1569,7 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
             axis.text = element_text(size=22),
             panel.border=element_rect(colour="black",size=1, fill=NA))
 
-    #write to file
+    #build combo plot
     layout <- "
         ABC
     "
@@ -1565,8 +1577,10 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
     comboPlot <- patchwork::wrap_plots(A=scatter_Q, B=scatter_V, C=scatter_tau, design=layout , guides='collect') &
         theme(legend.position='bottom')
 
+    #write to file
     ggsave('cache/validationML.png', comboPlot, width=20, height=8)
 
+    #output validation metrics
     return(list('r2_Q'=r2_Q,
                 'r2_V'=r2_V,
                 'r2_tau'=r2))
@@ -1575,10 +1589,10 @@ makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF){
 
 #' makeMLQFig
 #'
-#' Makes figure of CONUS Q_total model validation
+#' Make figure of CONUS Q_total model validation
 #' 
 #' @param trainedModel_Q trained model for Q_total
-#' @param modelDF dataframe of gages for model training
+#' @param modelDF dataframe of gauges for model training
 #'
 #' @return figure written to file
 makeMLQFig <- function(trainedModel_Q, modelDF){
@@ -1605,7 +1619,7 @@ makeMLQFig <- function(trainedModel_Q, modelDF){
         dplyr::left_join(modelDF, by='.row') %>%
         dplyr::filter(is.na(prob)==0)
 
-    #plot
+    #plot Qtotal ml comparison
     full_predictions_Q$prob <- factor(full_predictions_Q$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     r2_Q <- round(summary(lm(.pred~Q_m3dy, data=full_predictions_Q))$r.squared,2)
     scatter_Q <- ggplot(full_predictions_Q, aes(x=10^(Q_m3dy), y=10^(.pred))) + #natural space so we can use scale_log10
@@ -1635,9 +1649,9 @@ makeMLQFig <- function(trainedModel_Q, modelDF){
 
 #' makeGageMap
 #'
-#' Makes figure of CONUS streamgages used in study
+#' Makes figure of CONUS streamgauges used in study
 #' 
-#' @param gage_df dataframe of gages for model training
+#' @param gage_df dataframe of gauges for model training
 #'
 #' @return figure written to file
 makeGageMap <- function(gage_df) {
@@ -1659,11 +1673,11 @@ makeGageMap <- function(gage_df) {
     states <- sf::st_union(states) %>%
         sf::st_transform(crs=sf::st_crs(4326))
 
-    #build gage shapefile
+    #build gauge shapefile
     gage_shp <- gage_df %>%
         sf::st_as_sf(coords=c('lon', 'lat'), crs='epsg:4326')
 
-    #plot
+    #plot gauge map
     map <- ggplot(gage_shp) +
         geom_sf(data=states,
             color='black',
@@ -1693,7 +1707,7 @@ makeGageMap <- function(gage_df) {
 
 #' makeHuc4Map
 #'
-#' Makes figure of CONUS basins used in study
+#' Make figure of CONUS basins used in study
 #'
 #' @return figure written to file
 makeHuc4Map <- function(){
@@ -1712,7 +1726,7 @@ makeHuc4Map <- function(){
                                                 'United States Virgin Islands',
                                                 'Hawaii'))) #remove non CONUS states/territories
 
-    #regional basin ids
+    #regional basin ids (huc4s)
     hucs <- c('0101', '0102', '0103', '0104', '0105', '0106', '0107', '0108', '0109', '0110',
         '0202', '0203', '0204', '0205', '0206', '0207', '0208',
         '0301', '0302', '0303', '0304', '0305', '0306', '0307', '0308', '0309', '0310', '0311', '0312', '0313', '0314', '0315', '0316', '0317', '0318',
@@ -1743,7 +1757,7 @@ makeHuc4Map <- function(){
     basins <- basins %>%
         sf::st_intersection(states)
 
-    #plot
+    #plot huc4 basins
     map <- ggplot(basins) +
         geom_sf(fill='#a4ac86', color='#333d29', linewidth=0.75) +
         geom_sf(data=states,color='black',linewidth=1.5,alpha=0) +
@@ -1756,14 +1770,14 @@ makeHuc4Map <- function(){
 
 #' makePhysioMap
 #'
-#' Makes map of 8 physiographic divisions used in study
+#' Make map of 8 physiographic divisions used in study
 #'
 #' @return figure written to file
 makePhysioMap <- function(){
     library(ggplot2)
     theme_set(theme_classic())
 
-        #CONUS boundary
+    #CONUS boundary
     states <- sf::st_read('data/path_to_data/CONUS_sediment_data/cb_2018_us_state_5m.shp')
     states <- dplyr::filter(states, !(NAME %in% c('Alaska',
                                                 'American Samoa',
@@ -1774,7 +1788,7 @@ makePhysioMap <- function(){
                                                 'United States Virgin Islands',
                                                 'Hawaii'))) #remove non CONUS states/territories
 
-    #setup regions
+    #setup physiographic regions
     sf::sf_use_s2(FALSE)
     regions <- sf::st_read('data/physio.shp') #physiographic regions
     regions <- fixGeometries(regions)
@@ -1791,7 +1805,7 @@ makePhysioMap <- function(){
     states <- sf::st_union(states) %>%
         sf::st_transform(crs=sf::st_crs(regions))
 
-    #plot
+    #plot physiographic regions
     map <- ggplot(regions) +
         geom_sf(aes(fill=DIVISION), color='black', linewidth=0) +
         geom_sf(data=states,color='black',linewidth=1.5,alpha=0) +
@@ -1806,11 +1820,11 @@ makePhysioMap <- function(){
 
 #' makeInterpretableML
 #'
-#' Makes figure of permutation VIP plots for interpretable ML
+#' Make figure of permutation VIP plots for interpretable ML
 #'
 #' @param model_V_eval workflow result from nested resampling model evaluation scheme: volume
 #' @param model_Qf_eval workflow result from nested resampling model evaluation scheme: Qexc
-#' @param gageForModel_combined: dataframe of predictor features and output variables V and Qexc
+#' @param gageForModel_combined: dataframe of predictor features and output variables Vflood and Qexc
 #'
 #' @return figure written to file
 makeInterpretableML <- function(model_V_eval, model_Qf_eval, gageForModel_combined){
@@ -1818,6 +1832,7 @@ makeInterpretableML <- function(model_V_eval, model_Qf_eval, gageForModel_combin
     library(ggplot2)
     theme_set(theme_classic())
 
+    #wrapper for permutation VIP
     pred_fun <- function(object, newdata){
         predict(object, newdata)$.pred
     }
@@ -1829,8 +1844,7 @@ makeInterpretableML <- function(model_V_eval, model_Qf_eval, gageForModel_combin
     scores_fin <- data.frame('variable'=vip::vi(trainedModelFin[[1]]$model, method='permute',target='V_m3',metric='rmse',pred_wrapper = pred_fun,train=data_reduced)$Variable)
     for(i in 1:length(trainedModelFin)){
         model <- trainedModelFin[[i]]$model
-        scores <- vip::vi(trainedModelFin[[1]]$model, method='permute',target='V_m3',metric='rmse',pred_wrapper = pred_fun,train=data_reduced) #for lightgbm, this is the coefficient magnitude for each feature, re-scaled to relative percentages. Gain "represents fractional contribution of each feature to the model based on the total gain of this feature's splits"
-            #https://koalaverse.github.io/vip/reference/vi_model.html
+        scores <- vip::vi(trainedModelFin[[1]]$model, method='permute',target='V_m3',metric='rmse',pred_wrapper = pred_fun,train=data_reduced) #https://koalaverse.github.io/vip/reference/vi_model.html
         colnames(scores) <- c('variable', paste0('importance_',i))
         scores_fin <- scores_fin %>%
             dplyr::left_join(scores, by='variable')
@@ -1840,16 +1854,19 @@ makeInterpretableML <- function(model_V_eval, model_Qf_eval, gageForModel_combin
         dplyr::group_by(variable) |> #dummy group
         dplyr::summarise(dplyr::across(tidyselect::everything(), mean, na.rm = TRUE))
 
+    #compute summary scores across cv folds
     scores_cv <- data.frame('variable'=scores_repeatMean$variable,
                         'ymean'=apply(scores_repeatMean[,-1], 1, function(x){mean(x, na.rm=T)}),
                         'ymin'=apply(scores_repeatMean[,-1], 1, function(x){min(x, na.rm=T)}),
                         'ymax'=apply(scores_repeatMean[,-1], 1, function(x){max(x, na.rm=T)}))
 
+    #hardcoded varibale names!! BE CAREFUL !!
     scores_cv <- scores_cv[order(scores_cv$ymean, decreasing = TRUE),]
     scores_cv <- scores_cv[1:10,]
     scores_cv$Category <- c('Physiography', 'Physiography',  'Hydrology',             'Physiography',        'Physiography','Climate',           'Climate',            'Climate',           'Climate',            'Climate')
     scores_cv$variable <- c('Reach length', 'Drainage area', 'Mean annual discharge', 'Unit catchment area', 'Slope',       'Mean Jul. rainfall','Mean Aug. rainfall', 'Mean Apr. rainfall','Mean Sep. rainfall', 'Mean Jun. rainfall')
 
+    #plot Vflood vip
     vip_permute_V <- ggplot(scores_cv, aes(x=ymean, y=forcats::fct_reorder(variable, ymean), fill=Category))+
         geom_col(color='black', size=1.2) +
         geom_errorbar(aes(xmin = ymin, xmax = ymax), width = 0.3, linewidth=1.5, color = "black") +
@@ -1870,8 +1887,7 @@ makeInterpretableML <- function(model_V_eval, model_Qf_eval, gageForModel_combin
     scores_fin <- data.frame('variable'=vip::vi(trainedModelFin[[1]]$model, method='permute',target='V_m3',metric='rmse',pred_wrapper = pred_fun,train=data_reduced)$Variable)
     for(i in 1:length(trainedModelFin)){
         model <- trainedModelFin[[i]]$model
-        scores <- vip::vi(trainedModelFin[[1]]$model, method='permute',target='V_m3',metric='rmse',pred_wrapper = pred_fun,train=data_reduced) #for lightgbm, this is the coefficient magnitude for each feature, re-scaled to relative percentages. Gain "represents fractional contribution of each feature to the model based on the total gain of this feature's splits"
-            #https://koalaverse.github.io/vip/reference/vi_model.html
+        scores <- vip::vi(trainedModelFin[[1]]$model, method='permute',target='V_m3',metric='rmse',pred_wrapper = pred_fun,train=data_reduced) #https://koalaverse.github.io/vip/reference/vi_model.html
         colnames(scores) <- c('variable', paste0('importance_',i))
         scores_fin <- scores_fin %>%
             dplyr::left_join(scores, by='variable')
@@ -1881,16 +1897,19 @@ makeInterpretableML <- function(model_V_eval, model_Qf_eval, gageForModel_combin
         dplyr::group_by(variable) |> #dummy group
         dplyr::summarise(dplyr::across(tidyselect::everything(), mean, na.rm = TRUE))
 
+    #summarize scores across cv folds
     scores_cv <- data.frame('variable'=scores_repeatMean$variable,
                         'ymean'=apply(scores_repeatMean[,-1], 1, function(x){mean(x, na.rm=T)}),
                         'ymin'=apply(scores_repeatMean[,-1], 1, function(x){min(x, na.rm=T)}),
                         'ymax'=apply(scores_repeatMean[,-1], 1, function(x){max(x, na.rm=T)}))
 
+    #hardcoded varibale names!! BE CAREFUL !!
     scores_cv <- scores_cv[order(scores_cv$ymean, decreasing = TRUE),]
     scores_cv <- scores_cv[1:10,]
     scores_cv$Category <- c('Physiography',  'Hydrology',             'Physiography','Hydrology', 'Climate',           'Climate',              'Physiography',        'Climate',               'Climate',            'Climate')
     scores_cv$variable <- c('Drainage area', 'Mean annual discharge', 'Stream Order','Flood size','Mean Jul. rainfall','Mean Feb. temperature','Unit catchment area', 'Mean Jan. temperature', 'Mean Jun. rainfall', 'Mean Nov. rainfall')
 
+    #plot Qexc (or Qflood) vip
     vip_permute_Qf <- ggplot(scores_cv, aes(x=ymean, y=forcats::fct_reorder(variable, ymean), fill=Category))+
         geom_col(color='black', size=1.2) +
         geom_errorbar(aes(xmin = ymin, xmax = ymax), width = 0.3, linewidth=1.5, color = "black") +
@@ -1907,6 +1926,7 @@ makeInterpretableML <- function(model_V_eval, model_Qf_eval, gageForModel_combin
             legend.text = element_text(size=24),
             plot.tag = element_text(size=28,face='bold'))
 
+    #build combo plot
     layout <- "
     AB
     "
@@ -1914,13 +1934,14 @@ makeInterpretableML <- function(model_V_eval, model_Qf_eval, gageForModel_combin
     comboPlot <- patchwork::wrap_plots(A=vip_permute_V, B=vip_permute_Qf, design=layout , guides='collect') &
         theme(legend.position='bottom')
 
+    #write to file
     ggsave('cache/interpretML.png', comboPlot,height=10,width=18)
 }
 
 
 #' build_regulatedReachFig
 #'
-#' Makes figure of boxplots comparing regulated reaches to unregulated reaches
+#' Make figure of boxplot distributions comparing regulated reaches to unregulated reaches
 #'
 #' @param regulated_df dataframe result from dam~river joining (see src/functions.R)
 #'
@@ -1929,6 +1950,7 @@ build_regulatedReachFig <- function(regulated_df){
     library(ggplot2)
     theme_set(theme_classic())
 
+    #reaches not dammed, not immedately downstream of a dam
     combined_other <- regulated_df %>%
         sf::st_drop_geometry() %>%
         purrr::map("other_reaches") %>%
@@ -1936,6 +1958,7 @@ build_regulatedReachFig <- function(regulated_df){
         dplyr::mutate(regulation_flag = 'unreg') %>%
         dplyr::select(c('huc4', 'NHDPlusID', 'regulation_flag', 'prob', 'log10Qexc_m3dy', 'TotDASqKm', 'log10tau_hr', 'LengthKM'))
 
+    #reaches immedately downstream of a dam
     combined_regulated <- regulated_df %>%
         sf::st_drop_geometry() %>%
         purrr::map("regulated_reaches") %>%
@@ -1943,16 +1966,19 @@ build_regulatedReachFig <- function(regulated_df){
         dplyr::mutate(regulation_flag = 'reg') %>%
         dplyr::select(c('huc4', 'NHDPlusID', 'regulation_flag', 'prob', 'log10Qexc_m3dy', 'TotDASqKm', 'log10tau_hr', 'LengthKM'))
 
+    #combine for plotting
     forPlot <- rbind(combined_other, combined_regulated)
     forPlot <- forPlot %>%
         sf::st_drop_geometry()
 
+    #update labels for plotting
     forPlot$prob_lab <- ifelse(forPlot$prob == 0.02, "2%",
                                     ifelse(forPlot$prob == 0.1, "10%",
                                         ifelse(forPlot$prob == 0.2, "20%",
                                             ifelse(forPlot$prob == 0.5, "50%", NA))))
     forPlot$prob_lab <- factor(forPlot$prob_lab, levels=c('2%', '10%', '20%', '50%'))
 
+    #plot comparison of tau_flood
     boxplots_tau <- ggplot(forPlot, aes(fill=regulation_flag, y=10^(log10tau_hr)/LengthKM, x=factor(prob_lab)))+
         geom_boxplot(color='black') +
         scale_fill_brewer(palette='Set2', name='', labels=c('Upstream dam', 'No upstream dam'))+
@@ -1966,6 +1992,7 @@ build_regulatedReachFig <- function(regulated_df){
             legend.title=element_text(size=22),
             plot.tag = element_text(size=26,face='bold'))
 
+    #plot comaprison of Qexc (or Q_flood)
     boxplots_Qf <- ggplot(forPlot, aes(fill=regulation_flag, y=10^(log10Qexc_m3dy)/(TotDASqKm*1e6), x=factor(prob_lab)))+
         geom_boxplot(color='black') +
         scale_fill_brewer(palette='Set2', name='', labels=c('Upstream dam', 'No upstream dam'))+
@@ -1979,10 +2006,11 @@ build_regulatedReachFig <- function(regulated_df){
             legend.title=element_text(size=22),
             plot.tag = element_text(size=26,face='bold'))
 
+    #write to file
     ggsave('cache/regulation_tau.png', boxplots_tau)
     ggsave('cache/regulation_Qf.png', boxplots_Qf)
 
-    #save for summary stats
+    #export summary stats
     out <- forPlot %>%
         dplyr::group_by(regulation_flag, prob) %>%
         dplyr::summarize(medianTau_hr_km = median(10^(log10tau_hr)/LengthKM),
@@ -1994,7 +2022,7 @@ build_regulatedReachFig <- function(regulated_df){
 
 #' sw_makeMLValFig
 #'
-#' Makes figure of southwestern ml validation
+#' Make figure of southwestern ml validation
 #'
 #' @param trainedModel_Q workflow result from nested resampling model evaluation scheme: Qexc
 #' @param trainedModel_V workflow result from nested resampling model evaluation scheme: volume
@@ -2010,6 +2038,7 @@ sw_makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF, gages_df_co
     gages_df_combined <- gages_df_combined %>%
         dplyr::select(c('site_no', 'huc4')) %>%
         dplyr::distinct()
+
     modelDF <- modelDF %>%
         dplyr::left_join(gages_df_combined, by=c('GageID'='site_no'))
 
@@ -2023,6 +2052,7 @@ sw_makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF, gages_df_co
         full_predictions_Q <- rbind(full_predictions_Q, results)
     }
 
+    #filter for lower Colorado basin and Rio Grande Basin
     full_predictions_Q$huc4 <- modelDF[full_predictions_Q$.row,]$huc4
     full_predictions_Q <- full_predictions_Q %>%
         dplyr::filter(substr(huc4,1,2) %in% c('13', '15'))
@@ -2037,6 +2067,7 @@ sw_makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF, gages_df_co
         full_predictions_V <- rbind(full_predictions_V, results)
     }
 
+    #filer for lower Colorado basin and Rio Grande Basin
     full_predictions_V$huc4 <- modelDF[full_predictions_V$.row,]$huc4
     full_predictions_V <- full_predictions_V %>%
         dplyr::filter(substr(huc4,1,2) %in% c('13', '15'))
@@ -2054,7 +2085,7 @@ sw_makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF, gages_df_co
         dplyr::left_join(modelDF, by='.row') %>%
         dplyr::filter(is.na(prob)==0)
 
-    #plot
+    #plot Qexc (or Q_flood) southwest comparison
     full_predictions_Q$prob <- factor(full_predictions_Q$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     r2_Q <- round(summary(lm(.pred~Qexc_m3dy, data=full_predictions_Q))$r.squared,2)
     scatter_Q <- ggplot(full_predictions_Q, aes(x=10^(Qexc_m3dy), y=10^(.pred))) + #natural space so we can use scale_log10
@@ -2075,6 +2106,7 @@ sw_makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF, gages_df_co
             axis.text = element_text(size=22),
             panel.border=element_rect(colour="black",size=1, fill=NA))
 
+    #plot V_flood southwest comparison
     full_predictions_V$prob <- factor(full_predictions_V$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     r2_V <- round(summary(lm(.pred~V_m3, data=full_predictions_V))$r.squared,2)
     scatter_V <- ggplot(full_predictions_V, aes(x=10^(V_m3), y=10^(.pred))) + #natural space so we can use scale_log10
@@ -2103,6 +2135,7 @@ sw_makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF, gages_df_co
                     log10tau_hr.pred = (.pred.y - .pred.x) + log10(24)) %>%
         tidyr::drop_na()
 
+    #plot tau_flood comparison for southwest
     r2 <- round(summary(lm(log10tau_hr.pred~log10tau_hr, data=full_predictions))$r.squared,2)
     full_predictions$prob <- factor(full_predictions$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     scatter_tau <- ggplot(full_predictions, aes(x=10^(log10tau_hr), y=10^(log10tau_hr.pred))) + #natural space so we can use scale_log10
@@ -2123,7 +2156,7 @@ sw_makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF, gages_df_co
             axis.text = element_text(size=22),
             panel.border=element_rect(colour="black",size=1, fill=NA))
 
-    #write to file
+    #build combo plot
     layout <- "
         ABC
     "
@@ -2131,13 +2164,14 @@ sw_makeMLValFig <- function(trainedModel_Q, trainedModel_V, modelDF, gages_df_co
     comboPlot <- patchwork::wrap_plots(A=scatter_Q, B=scatter_V, C=scatter_tau, design=layout , guides='collect') &
         theme(legend.position='bottom')
 
+    #write to file
     ggsave('cache/sw_internal_review_validationML.png', comboPlot, width=20, height=8)
 }
 
 
 #' sw_makeCalculationValFig
 #'
-#' Makes figure of southwest US ml model validation
+#' Make figure of southwest US ml model validation
 #' 
 #' @param gageQexc_val list of dataframes of gauged flood events with observed (measured) bankfull discharge. For validation.
 #' @param gages_df_combined dataframe of streamgauges joined to huc4 basins (for southwest filtering) 
@@ -2151,7 +2185,7 @@ sw_makeCalculationValFig <- function(gageQexc_val, gages_df_combined){
         dplyr::select(c('site_no', 'huc4')) %>%
         dplyr::distinct()
 
-    #wrangle
+    #wrangle flow probs
     gageDF_02 <- dplyr::bind_rows(gageQexc_val) %>%
         dplyr::filter(Qexc_m3dy > 0) %>%
         dplyr::mutate(prob = 0.02)
@@ -2169,6 +2203,8 @@ sw_makeCalculationValFig <- function(gageQexc_val, gages_df_combined){
         dplyr::mutate(prob = 0.50)
 
     gageDF <- rbind(gageDF_02, gageDF_10, gageDF_20, gageDF_50)
+
+    #filter for southwest rivers (lower Colorado River basin and Rio Grande river basin)
     gageDF <- gageDF %>%
         dplyr::left_join(gages_df_combined, by='site_no') %>%
         dplyr::filter(substr(huc4,1,2) %in% c('13','15'))
@@ -2180,9 +2216,9 @@ sw_makeCalculationValFig <- function(gageQexc_val, gages_df_combined){
         dplyr::distinct() %>%
         dplyr::filter(Qexc_m3dy > 0) %>%
         tidyr::pivot_wider(id_cols=c(site_no, prob), names_from=flag, values_from=c('Qexc_m3dy')) %>%
-        tidyr::drop_na() #remove gages with no modeled flows (and a handful of 'gages' with no flow within our time record)
+        tidyr::drop_na() #remove gauges with no modeled flows (and a handful of 'gauges' with no flow within our time record)
 
-    #plot
+    #plot Qexc (or Qflood) southwest comparison
     lm <- lm(log10(model)~log10(obs), data=df)
     df$prob <- factor(df$prob, levels=c(0.50, 0.20, 0.10, 0.02))
     plot1 <- ggplot(df, aes(x=obs, y= model)) +
@@ -2206,5 +2242,6 @@ sw_makeCalculationValFig <- function(gageQexc_val, gages_df_combined){
             plot.tag = element_text(size=26,
                                     face='bold'))
 
+    #write to file
     ggsave('cache/sw_internal_review_validation_calculation.png', plot1, width=9, height=9)
 }

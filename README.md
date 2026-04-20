@@ -2,9 +2,11 @@
 
 This repo contains code to run our machine learning analysis of United States river-floodplain exchange.
 
+Note that, as with all large-scale models, our goal is to reasonably capture broad spatial patterns. Caution should be used to avoid over-interpreting results for individual watersheds.
+
 ## Setup
 
-Use `environment.yaml` to generate conda environment.
+Use `environment.yml` to generate conda environment.
 
 You will need a dev version (at the time) of `terra` and `flowdem`. We used `terra` version 1.9.14 and `flowdem` version 0.2.0. Download within an interactive R session within the conda environment via:
 
@@ -13,7 +15,7 @@ remotes::install_github("rspatial/terra",  repos='https://rspatial.r-universe.de
 remotes::install_github("KennethTM/flowdem")
 ```
 
-The data repo is specified by a simulink at `~/data/path_to_data`. Other lookup tables and auxillary datasets are stored directly in `~/data`. Make sure you inspect the functions to understand how the NHD-HR hydrography, DEMs, and other datasets must be stored to run. Note that setting up your own data repo is non-trivial.
+The data repo is specified by a simulink at `~/data/path_to_data`. Other lookup tables and auxillary datasets are stored directly in `~/data`. Make sure you inspect the functions to understand how the NHD-HR hydrography, DEMs, and other datasets must be stored to run. Note that setting up your own data repo is not trivial.
 
 ## To run
 

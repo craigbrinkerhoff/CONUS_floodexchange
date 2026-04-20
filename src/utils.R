@@ -5,11 +5,11 @@
 
 #' grabAllGages
 #'
-#' Grabs all streamgages from the NHD
+#' Grab all streamgages joined a priori to the NHD
 #'
 #' @param huc4 basin ID code
 #'
-#' @return streamgages joined a priori to the NHD
+#' @return streamgauges joined a priori to the NHD
 grabAllGages <- function(huc4){
   huc2 <- substr(huc4, 1, 2)
 
@@ -22,7 +22,7 @@ grabAllGages <- function(huc4){
 
 #' cleanUpDF
 #'
-#' Makes sure that same training data are used for V_flood, Q_flood, and Q_total machine learning models
+#' Ensures the same training data are used for V_flood, Q_flood, and Q_total machine learning models
 #'
 #' @param df model training dataframe
 #'
@@ -39,7 +39,7 @@ cleanUpDF <- function(df){
 
 #' cleanUpDF_timing
 #'
-#' Makes sure that good training data used for timing model
+#' Ensures non-NA training data are used for timing map
 #'
 #' @param df model training dataframe
 #'
@@ -54,16 +54,16 @@ cleanUpDF_timing <- function(df){
 
 #' cleanUpGages
 #'
-#' Ensure that model training dataframe and dataframe for plotting gages agree
+#' Ensures model training dataframe and dataframe for plotting streamgauges agree
 #'
-#' @param gages_df_combined Dataframe of all streamgages
-#' @param modelDF Dataframe of all streamgages used for model training
+#' @param gages_df_combined Dataframe of all streamgauges
+#' @param modelDF Dataframe of all streamgauges used for model training
 #'
 #' @return filtered gage dataframe for mapping
 cleanUpGages <- function(gages_df_combined, modelDF){
   out <- gages_df_combined %>%
     dplyr::inner_join(modelDF, by=c('site_no'='GageID')) %>%
-    dplyr::distinct() # a few duplicate rows, presumably from spatial joining of physio upstream. Not a problem in the modelDF
+    dplyr::distinct() # a few duplicate rows, presumably from spatial joining of physio upstream. Not a problem in the modelDF.
 
   return(out)
 }
@@ -71,13 +71,13 @@ cleanUpGages <- function(gages_df_combined, modelDF){
 
 #' getBasinGages
 #'
-#' Grabs streamgages that meet our QAQC filters
+#' Grab streamgauges that meet our QAQC filters
 #'
 #' @param huc4id NHD basin code
-#' @param gageRecordStart Start of time period for gage record
-#' @param gageRecordEnd End of time period for gage record
+#' @param gageRecordStart Start of time period for gauge record
+#' @param gageRecordEnd End of time period for gauge record
 #'
-#' @return streamgage IDs that pass our quality control
+#' @return streamgauge IDs that pass our quality control
 getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd){
   set.seed(435)
 
@@ -88,16 +88,16 @@ getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd){
 
   huc8ids <- huc8s$huc8
 
-  #loop through hub8 basins, grabbing gages that pass initial QAQC parameters
+  #loop through hub8 basins, grabbing gauges that pass initial QAQC parameters
   gages_fin <- data.frame()
   for(i in huc8ids){
     gages <- tryCatch({dataRetrieval::whatNWISdata(huc = i,
                                         parameterCd = c('00065', '00060'), #discharge parameter code [cfs]
-                                        startDt = gageRecordStart, #only checks the gagues were active between these dates, need to pull the gage record to calucalte actual periods of redcord, etc. (see below)
+                                        startDt = gageRecordStart, #only checks the gauges were active between these dates, need to pull the gauge record to calculate actual periods of record (see below)
                                         endDt = gageRecordEnd)},
                       error=function(x){data.frame('site_no'=i,
                                                   'parm_cd'=NA,
-                                                  'data_type_cd'=NA)}) #trycatch for huc8s without any gages can't return anything
+                                                  'data_type_cd'=NA)}) #trycatch for huc8s without any gauges can't return anything
 
     #remove 'water quality' discharge measurements tagged under qw
     gages <- gages %>%
@@ -118,11 +118,11 @@ getBasinGages <- function(huc4id, gageRecordStart, gageRecordEnd){
 
 #' getBasinGagesVal
 #'
-#' Grabs all ids EXCEPT the one withheld for jacknife regression
+#' Grab all gauge ids EXCEPT the individual gauge withheld for jacknife regression
 #'
 #' @param BHGmodel_jacknife Bankfull hydraulics models dataframe
 #'
-#' @return Streamgage IDs sans the withheld streamgage
+#' @return Streamgauge IDs sans the withheld streamgauge
 getBasinGagesVal <- function(BHGmodel_jacknife){
 
     gages <- BHGmodel_jacknife$GageID
@@ -133,13 +133,13 @@ getBasinGagesVal <- function(BHGmodel_jacknife){
 
 #' makeGageDF
 #'
-#' Makes a dataframe from list of streamgages
+#' Make a dataframe from list of streamgauges
 #'
-#' @param gage Gage record dataframe
+#' @param gage Gauge record dataframe
 #' @param model_gages model river network
 #' @param huc4 basin code
 #'
-#' @return Dataframe of streamgages in a basin that are also in the model
+#' @return Dataframe of streamgauges in a basin that are also in the model
 makeGageDF <- function(gage, model_gages, huc4){
   if(nrow(gage %>% dplyr::bind_rows())==0) {return(data.frame())}
   out <- gage %>%
@@ -154,7 +154,7 @@ makeGageDF <- function(gage, model_gages, huc4){
 
 #' tallyReaches
 #'
-#' count number of modeled reaches in a basin
+#' Count number of modeled reaches in a basin
 #'
 #' @param basinPredictions hydrography dataframe of modeled predictions
 #'

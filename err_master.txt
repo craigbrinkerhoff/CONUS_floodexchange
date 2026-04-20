@@ -7,3 +7,8 @@ The following objects are masked from ‘package:base’:
 
     intersect, setdiff, setequal, union
 
+Error:
+! Error in tar_make():
+  no applicable method for 'left_join' applied to an object of class "NULL"
+  See https://books.ropensci.org/targets/debugging.html
+Execution halted

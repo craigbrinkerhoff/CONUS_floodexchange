@@ -5,23 +5,23 @@
 
 #' buildGageFloodFunctions
 #'
-#' Builds df with gage Qflood
-#' Adds all auxillary variables needed, i.e. bankful hydraulics
+#' Build df with gauge Qflood
+#' Add all auxillary variables needed, i.e. bankful hydraulics
 #'
 #' @param HUC4 basin ID code
 #' @param BHGmodel Bankfull hydraulics models
-#' @param gageDF gage metadata dataframe
-#' @param min_floods Minimum number of floods on record we allow (to ensure we can compute flood probabilities)
+#' @param gageDF gauge metadata dataframe
+#' @param min_floods Minimum number of floods on record we allow (see _targets.R)
 #'
-#' @return dataframe of gages with aux info for computing Q_flood
+#' @return dataframe of gauges with aux info for computing Q_flood
 buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, min_floods) {
     if(nrow(gageDF %>% dplyr::bind_rows())==0){
         return(data.frame())
     }
 
-    #prep gages for filtering
+    #prep gauges for filtering
     gageDF_02 <- dplyr::bind_rows(gageDF) %>%
-        dplyr::filter(Qexc_m3dy > 0) %>% # integration necessitates storms be 2+ days long to calculate a flux
+        dplyr::filter(Qexc_m3dy > 0) %>% # note that integration necessitates storms be 2+ days long to calculate a flux. Fine for the large floods we focus on.
         dplyr::mutate(prob = 0.02)
     
     gageDF_10 <- dplyr::bind_rows(gageDF) %>%
@@ -46,8 +46,8 @@ buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, min_floods) {
         dplyr::filter(n_floods >= min_floods) %>%
         dplyr::distinct()
 
+    #join hydrography attributes
     huc2 <- substr(huc4, 1, 2)
-
     network_VAA <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'), layer='NHDPlusFlowlineVAA', quiet=TRUE)
     network_gages <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'), layer='NHDPlusEROMQAMA', quiet=TRUE)
     network <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),layer = 'NHDFlowline',quiet = TRUE) %>%
@@ -56,7 +56,7 @@ buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, min_floods) {
         dplyr::left_join(network_gages, by='NHDPlusID') %>%
         dplyr::select(c('NHDPlusID', 'WBArea_Permanent_Identifier', 'GageID','StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope', 'Shape'))
 
-    #load Indiana fixed basins
+    #load Indiana fixed basins (see manuscript)
     indiana <- readr::read_csv('data/indiana.csv')
     if(huc4 %in% indiana$huc4){
         network <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/indiana/indiana_fixed_',huc4,'.shp'),quiet = TRUE) %>%
@@ -87,6 +87,7 @@ buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, min_floods) {
         dplyr::relocate(WBAreaSqKm, .after=WBArea_Permanent_Identifier) %>%
         dplyr::select(!FType)
 
+    #keep gauged reaches only
     network <- network %>%
         dplyr::filter(GageID %in% gageDF$site_no)
 
@@ -98,6 +99,7 @@ buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, min_floods) {
         return(data.frame())
     }
 
+    #fix geometeries (if necessary)
     huc4id <- huc4
     basin <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU4.shp')) %>%
         dplyr::filter(huc4 == huc4id)
@@ -107,7 +109,7 @@ buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, min_floods) {
     sf::sf_use_s2(FALSE)
     regions <- sf::st_read('data/physio.shp') #physiographic regions
     regions <- fixGeometries(regions)
-    shp_temp <- sf::st_join(basin, regions, largest=TRUE) #take the physiographic region that the basin is mostly in (dominant spatial intersection)
+    shp_temp <- sf::st_join(basin, regions, largest=TRUE) #take the physiographic region that the basin is primarily overlapping (dominant spatial intersection)
 
     physio_region <- shp_temp$DIVISION
 
@@ -138,14 +140,14 @@ buildGageFloodFunctions <- function(huc4, BHGmodel, gageDF, min_floods) {
 
 #' buildGageFloodFunctions_volumeval
 #'
-#' Builds df with gage Qflood for validation sites (gages with in situ Qb values)
-#' Adds all auxiliary variables needed, i.e. bankfull hydraulics
+#' Build df with gauge Qflood for validation sites (gauges with in situ Qb values)
+#' Add all auxiliary variables needed, i.e. bankfull hydraulics
 #'
 #' @param HUC4 basin ID code
 #' @param BHGmodel Bankfull hydraulics models
-#' @param gageDF gage metadata dataframe
+#' @param gageDF gauge metadata dataframe
 #'
-#' @return dataframe of gages with aux info for computing Q_flood, filtered for those with bankfull obs
+#' @return dataframe of gauges with aux info for computing Q_flood, filtered for those with bankfull observations
 buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
     if(nrow(gageDF)==0){
         return(data.frame())
@@ -157,8 +159,8 @@ buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
                         Htf_m=gageDF$depth_m,
                         V_usgs_m3 = gageDF$V_usgs_m3)
 
+    #load hydrography attributes
     huc2 <- substr(huc4, 1, 2)
-
     network_VAA <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'), layer='NHDPlusFlowlineVAA', quiet=TRUE)
     network_gages <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'), layer='NHDPlusEROMQAMA', quiet=TRUE)
     network <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),layer = 'NHDFlowline',quiet = TRUE) %>%
@@ -167,7 +169,7 @@ buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
         dplyr::left_join(network_gages, by='NHDPlusID') %>%
         dplyr::select(c('NHDPlusID', 'WBArea_Permanent_Identifier', 'GageID','StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope', 'Shape'))
 
-    #load Indiana fixed basins
+    #load Indiana fixed basins (see manuscript)
     indiana <- readr::read_csv('data/indiana.csv')
     if(huc4 %in% indiana$huc4){
         network <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/indiana/indiana_fixed_',huc4,'.shp'),quiet = TRUE) %>%
@@ -199,6 +201,7 @@ buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
         dplyr::relocate(WBAreaSqKm, .after=WBArea_Permanent_Identifier) %>%
         dplyr::select(!FType)
 
+    #onlyy keep gauged reaches
     network <- network %>%
         dplyr::filter(NHDPlusID %in% gageDF$site_no)
 
@@ -206,6 +209,7 @@ buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
     network <- network %>%
         dplyr::filter(AreaSqKm > 0 & TotDASqKm > 0 & StreamCalc > 0) 
 
+    #fix geometries (if applicable)
     huc4id <- huc4
     basin <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/WBD_', huc2, '_HU2_Shape/Shape/WBDHU4.shp')) %>%
         dplyr::filter(huc4 == huc4id)
@@ -215,7 +219,7 @@ buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
     sf::sf_use_s2(FALSE)
     regions <- sf::st_read('data/physio.shp')
     regions <- fixGeometries(regions)
-    shp_temp <- sf::st_join(basin, regions, largest=TRUE) #take the physiographic region that the basin is mostly in (dominant spatial intersection)
+    shp_temp <- sf::st_join(basin, regions, largest=TRUE) #take the physiographic region that the basin is primarily in (dominant spatial intersection)
 
     physio_region <- shp_temp$DIVISION
 
@@ -241,12 +245,12 @@ buildGageFloodFunctions_volumeval <- function(huc4, BHGmodel, gageDF) {
 
 #' runDEMModel
 #'
-#' runs inundation model and adds Vflood to gage dataframe
+#' Run inundation model and add Vflood to gauge dataframe
 #'
 #' @param huc4 basin ID code
 #' @param network hydrography dataframe for inundation mapping
 #'
-#' @return returns hydrography with inundation estimates
+#' @return hydrography with inundation estimates
 runDEMModel <- function(huc4, network){
     if(nrow(network)==0){
         return(data.frame())
@@ -257,7 +261,7 @@ runDEMModel <- function(huc4, network){
     dem <- terra::rast(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/elev_cm.tif')) #[cm]
     d8 <- terra::rast(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/fdr.tif')) #[cm]
 
-    #run parallel inundation model
+    #wrapper for running inundation model in parallel
     inundationWrapper <- function(reach) {
         #lower bound on dem resolution
         if(reach$Wb_m <= 10 | reach$waterbody_type == 'lake/reservoir'){
@@ -267,7 +271,7 @@ runDEMModel <- function(huc4, network){
         }
 
         #run inundation model
-        inundationDataPackage <- prepInundationData(huc4, reach$NHDPlusID, reach$Wb_m, dem, d8)
+        inundationDataPackage <- prepInundationData(huc4, reach$NHDPlusID, reach$Wb_m, dem, d8) #see ~src/functions.R
         if(inundationDataPackage$flag == 'no pour points'){
             reach$A_m2 <-NA
             reach$V_m3 <- NA
@@ -281,7 +285,7 @@ runDEMModel <- function(huc4, network){
             #convert map to flood area
             flooded_pixels <- floodMap$binary
             flooded_pixels[flooded_pixels != 1] <- NA
-            flooded_pixels_cellsize <- terra::cellSize(flooded_pixels, mask=TRUE, transform=FALSE) #uses the equal-area projection of the mask (gets same result if transformed to gcs)
+            flooded_pixels_cellsize <- terra::cellSize(flooded_pixels, mask=TRUE, transform=FALSE) #uses conus equal-area projection of the mask
             flood_area_m2 <- terra::global(flooded_pixels_cellsize, 'sum', na.rm=T)
             flood_area_m2 <- ifelse(length(flood_area_m2)==0, 0, flood_area_m2)
 
@@ -301,7 +305,7 @@ runDEMModel <- function(huc4, network){
             flood_area_m2 <- ifelse(length(flood_area_m2)==0, 0, flood_area_m2)
 
             #convert flood map to volume
-            if(flood_area_m2 > 0) { #only if there's any actual inundated area at 10m resolution
+            if(flood_area_m2 > 0) {
                 floodmask <- floodMap$binary
                 floodmask[floodmask != 1] = 0
                 flood_depths <- floodMap$depths * floodmask
@@ -324,6 +328,7 @@ runDEMModel <- function(huc4, network){
         return(reach)
     }
 
+    #run inundation in parallel (within a single machine)
     library(plyr)
     library(doParallel)
     registerDoParallel(cores=detectCores()-2)
@@ -348,7 +353,7 @@ runDEMModel <- function(huc4, network){
 
 #' addOtherNHDFeatures
 #'
-#' Add NHD features for ML model training on gages
+#' Add NHD features for ML model training on gauges
 #'
 #' @param network hydrography network dataframe
 #' @param huc4id basin ID code
@@ -360,7 +365,8 @@ addOtherNHDFeatures <- function(network, huc4id){
     }
 
     huc2 <- substr(huc4id,1,2)
-    
+
+    #load precip and temperature datasets from NHD
     flow_df <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusEROMMA', quiet=TRUE) %>%
         dplyr::select(c('NHDPlusID', 'QBMA')) #naturalized flow
 
@@ -465,7 +471,7 @@ addOtherNHDFeatures <- function(network, huc4id){
         dplyr::left_join(temp_10, by='NHDPlusID') %>%
         dplyr::left_join(temp_11, by='NHDPlusID') %>%
         dplyr::left_join(temp_12, by='NHDPlusID') %>%
-        dplyr::filter(!(is.na(GageID))) %>% #there is a single reach that somehow got joined with no gage and no data, just remove here
+        dplyr::filter(!(is.na(GageID))) %>% #there is a single reach that somehow got joined with no gauge and no data, just remove here
         dplyr::distinct()
     
     return(network)
@@ -474,7 +480,7 @@ addOtherNHDFeatures <- function(network, huc4id){
 
 #' buildCONUSnetwork
 #'
-#' build hydrography network dataframe for ungaged prediction
+#' Build hydrography network dataframe for ungauged prediction
 #'
 #' @param huc4 basin ID code
 #' @param BHGmodel Bankfull hydraulic geometry models
@@ -492,7 +498,7 @@ buildCONUSnetwork <- function(huc4, BHGmodel){
         dplyr::left_join(network_gages, by='NHDPlusID') %>%
         dplyr::select(c('NHDPlusID', 'GageID', 'WBArea_Permanent_Identifier', 'StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope', 'Shape'))
 
-    #load Indiana fixed basins
+    #load Indiana fixed basins (see manuscript)
     indiana <- readr::read_csv('data/indiana.csv')
     if(huc4 %in% indiana$huc4){
         network <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/indiana/indiana_fixed_',huc4,'.shp'),quiet = TRUE) %>%
@@ -508,6 +514,7 @@ buildCONUSnetwork <- function(huc4, BHGmodel){
             dplyr::select(c('NHDPlusID', 'WBArea_Permanent_Identifier', 'GageID','StreamCalc', 'AreaSqKm', 'TotDASqKm', 'LengthKM', 'Slope', 'Shape'))
     }
 
+    #fix geometries (if applicable)
     network <- fixGeometries(network)
 
     #clip to CONUS land boundary (remove international streams and coastal estuaries like Long Island Sound and Chesapeake Bay)
@@ -536,7 +543,7 @@ buildCONUSnetwork <- function(huc4, BHGmodel){
         dplyr::select(c('Permanent_Identifier', 'FType', 'AreaSqKm'))
         colnames(waterbodies) <- c('Permanent_Identifier', 'FType', 'WBAreaSqKm')
 
-    #join waterbodies
+    #join waterbodies/reach types
     network <- network %>%
         dplyr::left_join(waterbodies, by=c('WBArea_Permanent_Identifier'='Permanent_Identifier')) %>%
         dplyr::mutate(waterbody_type = ifelse(FType %in% c('436', '390') & WBAreaSqKm > 0, 'lake/reservoir', 'river')) %>% #to be a waterbody, must have an area > 0
@@ -557,7 +564,7 @@ buildCONUSnetwork <- function(huc4, BHGmodel){
     sf::sf_use_s2(FALSE)
     regions <- sf::st_read('data/physio.shp')
     regions <- fixGeometries(regions)
-    shp_temp <- sf::st_join(basin, regions, largest=TRUE) #take the physiographic region that the basin is mostly in (dominant spatial intersection)
+    shp_temp <- sf::st_join(basin, regions, largest=TRUE) #take the physiographic region that the basin is primarily (dominant spatial intersection)
 
     physio_region <- shp_temp$DIVISION
 
@@ -579,86 +586,88 @@ buildCONUSnetwork <- function(huc4, BHGmodel){
 
     network$Hb_m <- network$Ab_m2 / network$Wb_m
 
-    # filter for rivers with bankfull width > 10m
+    # filter for rivers with bankfull width > 10m (matching inundation simulation)
     network <- network %>%
         dplyr::filter(AreaSqKm > 0 & Wb_m > 10) %>%
         dplyr::mutate(huc4=huc4)
 
+    #load precip and temperature datasets from NHD
     flow_df <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusEROMMA', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'QBMA')) 
+        dplyr::select(c('NHDPlusID', 'QBMA')) #naturalized flow
 
     precip_01 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM01', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'PrecipMM01'))
+        dplyr::select(c('NHDPlusID', 'PrecipMM01')) #precip jan
 
     precip_02 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM02', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'PrecipMM02'))
+        dplyr::select(c('NHDPlusID', 'PrecipMM02')) #precip feb
     
     precip_03 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM03', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'PrecipMM03'))
+        dplyr::select(c('NHDPlusID', 'PrecipMM03')) #precip mar
     
     precip_04 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM04', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'PrecipMM04'))
+        dplyr::select(c('NHDPlusID', 'PrecipMM04')) #precip apr
     
     precip_05 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM05', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'PrecipMM05'))
+        dplyr::select(c('NHDPlusID', 'PrecipMM05')) #precip may
     
     precip_06 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM06', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'PrecipMM06'))
+        dplyr::select(c('NHDPlusID', 'PrecipMM06')) #precip jun
     
     precip_07 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM07', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'PrecipMM07'))
+        dplyr::select(c('NHDPlusID', 'PrecipMM07')) #precip jul
     
     precip_08 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM08', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'PrecipMM08'))
+        dplyr::select(c('NHDPlusID', 'PrecipMM08')) #precip aug
     
     precip_09 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM09', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'PrecipMM09'))
+        dplyr::select(c('NHDPlusID', 'PrecipMM09')) #precip sep
     
     precip_10 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM10', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'PrecipMM10'))
+        dplyr::select(c('NHDPlusID', 'PrecipMM10')) #precip oct
     
     precip_11 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM11', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'PrecipMM11'))
+        dplyr::select(c('NHDPlusID', 'PrecipMM11')) #precip nov
     
     precip_12 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrPrecipMM12', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'PrecipMM12'))
+        dplyr::select(c('NHDPlusID', 'PrecipMM12')) #precip dec
 
     temp_01 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM01', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'TempMM01'))
+        dplyr::select(c('NHDPlusID', 'TempMM01')) #temp jan
 
     temp_02 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM02', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'TempMM02'))
+        dplyr::select(c('NHDPlusID', 'TempMM02')) #temp feb
     
     temp_03 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM03', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'TempMM03'))
+        dplyr::select(c('NHDPlusID', 'TempMM03')) #temp mar
     
     temp_04 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM04', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'TempMM04'))
+        dplyr::select(c('NHDPlusID', 'TempMM04')) #temp apr
     
     temp_05 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM05', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'TempMM05'))
+        dplyr::select(c('NHDPlusID', 'TempMM05')) #temp may
     
     temp_06 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM06', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'TempMM06'))
+        dplyr::select(c('NHDPlusID', 'TempMM06')) #temp jun
     
     temp_07 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM07', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'TempMM07'))
+        dplyr::select(c('NHDPlusID', 'TempMM07')) #temp jul
     
     temp_08 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM08', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'TempVMM08'))
+        dplyr::select(c('NHDPlusID', 'TempVMM08')) #temp aug
     
     temp_09 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM09', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'TempMM09'))
+        dplyr::select(c('NHDPlusID', 'TempMM09')) #temp sep
     
     temp_10 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM10', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'TempMM10'))
+        dplyr::select(c('NHDPlusID', 'TempMM10')) #temp oct
 
     temp_11 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM11', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'TempMM11'))
+        dplyr::select(c('NHDPlusID', 'TempMM11')) #temp nov
     
     temp_12 <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusIncrTempMM12', quiet=TRUE) %>%
-        dplyr::select(c('NHDPlusID', 'TempMM12'))
+        dplyr::select(c('NHDPlusID', 'TempMM12')) #temp dec
 
+    #filter add flow probs
     network <- network %>%
         dplyr::mutate(prob = purrr::map(.x = NHDPlusID, ~c(0.02, 0.10, 0.20, 0.50))) %>%
         tidyr::unnest(prob)
@@ -699,9 +708,9 @@ buildCONUSnetwork <- function(huc4, BHGmodel){
 
 #' trainModelEval_V
 #'
-#' Evaluate ml performance for predicitng V_flood
+#' Evaluate ml performance for predicting V_flood
 #'
-#' @param gageForModel_combined gage dataframe for model training
+#' @param gageForModel_combined gauge dataframe for model training
 #' @param nInnerFolds number inner layer folds for nested resampling cross-validation
 #' @param nOuterFolds number outer layer folds for nested resampling cross-validation
 #' @param numGrid Hyperparameter search space grid search parameter for nested resampling cross-validation
@@ -713,7 +722,7 @@ trainModelEval_V <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
     library(parsnip)
     library(bonsai)
 
-    #make sure all training sets comprise the same gages
+    #make sure all training sets comprise the same gauges
     data_fin <- gageForModel_combined %>%
         dplyr::mutate(V_m3 = log10(V_m3)) %>%
         dplyr::select(!Qexc_m3dy) %>%
@@ -725,6 +734,7 @@ trainModelEval_V <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
     set.seed(76)
     folds_out <- vfold_cv(data_fin, repeats=numRepeats, v=nOuterFolds)
 
+    #wrapper function for tuning across folds
     nestedWrapper <- function(object){
         set.seed(86)
         split <- object
@@ -736,11 +746,11 @@ trainModelEval_V <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
         recipe_full <- recipe(V_m3 ~ ., data=split_train) %>%
             step_cut(StreamCalc, breaks=seq(1,max(data_fin$StreamCalc),1)) %>% #one hot encoding of stream order
             step_dummy(StreamCalc) %>%
-            step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1 (necessary for some models, can't hurt for others)
+            step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1
 
         #model
         lightgbmboost_model <- boost_tree(tree_depth=tune(), min_n=tune(), trees=tune(), learn_rate=0.1) %>% #https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html and a default learning rate of 0.1 (learning rate and ntrees are inverses of one another so only one should be tuned)
-            set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package kind of ad hoc for some reason
+            set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package ad hoc rather than in tidymodels
             set_mode("regression")
 
         #workflow
@@ -759,15 +769,17 @@ trainModelEval_V <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
         final_wf <- workflow %>%
             finalize_workflow(bestModel)
 
-        #fit the final, best model to the completely independent test dataset
+        #fit the final, best model (across all folds) and evaluate on the withheld test set
         fit_fin <- final_wf %>%    
-            last_fit(split) #fits model to entire training set (across all folds) and evaluates on the indepedent test set
+            last_fit(split)
 
         return(list('summary'=fit_fin,
             'model_fin'=extract_workflow(fit_fin)))
     }
 
+    #run across folds
     result <- plyr::llply(folds_out$splits, nestedWrapper, .parallel=FALSE)
+
     return(result)
 }
 
@@ -776,16 +788,16 @@ trainModelEval_V <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
 #'
 #' Train ml model on all data to predict V_flood from NHD
 #'
-#' @param gageForModel_combined gage dataframe for model training
+#' @param gageForModel_combined gauge dataframe for model training
 #' @param nInnerFolds number inner layer folds for nested resampling cross-validation
 #'
-#' @return model for predicitng V_flood
+#' @return model for predicting V_flood
 trainModelFin_V <- function(gageForModel_combined, nInnerFolds, numGrid){
     library(tidymodels)
     library(parsnip)
     library(bonsai)
 
-    #make sure all training sets comprise the same gages
+    #make sure all training sets comprise the same gauges
     data_fin <- gageForModel_combined %>%
         dplyr::mutate(V_m3 = log10(V_m3)) %>%
         dplyr::select(!Qexc_m3dy) %>%
@@ -796,18 +808,18 @@ trainModelFin_V <- function(gageForModel_combined, nInnerFolds, numGrid){
     #tune using nested resampling procedure
     set.seed(76)
 
-    #retrain workflow on all data (using 10 fold cv for hyperparameter tuning)
+    #retrain workflow on all data (using cv for hyperparameter tuning)
     folds <- vfold_cv(data_fin, repeats=1, v=nInnerFolds)
 
     #recipe
     recipe_full <- recipe(V_m3 ~ ., data=data_fin) %>%
         step_cut(StreamCalc, breaks=seq(1,max(data_fin$StreamCalc),1)) %>% #one hot encoding of stream order
         step_dummy(StreamCalc) %>%
-        step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1 (necessary for some models, can't hurt for others)
+        step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1
 
     #model
     lightgbmboost_model <- boost_tree(tree_depth=tune(), min_n=tune(), trees=tune(), learn_rate=0.1) %>% #https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html and a default learning rate of 0.1 (learning rate and ntrees are inverses of one another so only one should be tuned)
-        set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package kind of ad hoc for some reason
+        set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package ad hoc rather than in tidymodels
         set_mode("regression")
 
     #workflow
@@ -837,9 +849,9 @@ trainModelFin_V <- function(gageForModel_combined, nInnerFolds, numGrid){
 
 #' trainModelEval_Qf
 #'
-#' Evaluate ml performance for predicitng Q_flood
+#' Evaluate ml performance for predicting Q_flood
 #'
-#' @param gageForModel_combined gage dataframe for model training
+#' @param gageForModel_combined gauge dataframe for model training
 #' @param nInnerFolds number inner layer folds for nested resampling cross-validation
 #' @param nOuterFolds number outer layer folds for nested resampling cross-validation
 #' @param numGrid Hyperparameter search space grid search parameter for nested resampling cross-validation
@@ -851,7 +863,7 @@ trainModelEval_Qf <- function(gageForModel_combined, nInnerFolds, nOuterFolds, n
     library(parsnip)
     library(bonsai)
 
-    #make sure all training sets comprise the same gages
+    #make sure all training sets comprise the same gauges
     data_fin <- gageForModel_combined %>%
         dplyr::mutate(Qexc_m3dy = log10(Qexc_m3dy)) %>%
         dplyr::select(!V_m3) %>%
@@ -863,6 +875,7 @@ trainModelEval_Qf <- function(gageForModel_combined, nInnerFolds, nOuterFolds, n
     set.seed(76)
     folds_out <- vfold_cv(data_fin, repeats=numRepeats, v=nOuterFolds)
 
+    #wrapper function for tuning across folds
     nestedWrapper <- function(object){
         set.seed(86)
         split <- object
@@ -874,11 +887,11 @@ trainModelEval_Qf <- function(gageForModel_combined, nInnerFolds, nOuterFolds, n
         recipe_full <- recipe(Qexc_m3dy ~ ., data=split_train) %>%
             step_cut(StreamCalc, breaks=seq(1,max(data_fin$StreamCalc),1)) %>% #one hot encoding of stream order
             step_dummy(StreamCalc) %>%
-            step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1 (necessary for some models, can't hurt for others)
+            step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1
 
         #model
         lightgbmboost_model <- boost_tree(tree_depth=tune(), min_n=tune(), trees=tune(), learn_rate=0.1) %>% #https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html and a default learning rate of 0.1 (learning rate and ntrees are inverses of one another so only one should be tuned)
-            set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package kind of ad hoc for some reason
+            set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package ad hoc rather than tidymodels
             set_mode("regression")
 
         #workflow
@@ -890,22 +903,24 @@ trainModelEval_Qf <- function(gageForModel_combined, nInnerFolds, nOuterFolds, n
         set.seed(835)
         tuned_workflow <- tune_grid(workflow, resamples = folds_in, grid=numGrid, verbose=TRUE)
 
-        #evalualte hyperparameter tuning
+        #evaluate hyperparameter tuning
         bestModel <- tuned_workflow %>%
             select_best(metric='rsq')
 
         final_wf <- workflow %>%
             finalize_workflow(bestModel)
 
-        #fit the final, best model to the completely independent test dataset
+        #fit the final, best model (across all folds) and evaluate on the withheld test set
         fit_fin <- final_wf %>%    
-            last_fit(split) #fits model to entire training set (across all folds) and evaluates on the indepedent test set
+            last_fit(split)
 
         return(list('summary'=fit_fin,
             'model_fin'=extract_workflow(fit_fin)))
     }
 
+    #run across folds
     result <- plyr::llply(folds_out$splits, nestedWrapper, .parallel=FALSE)
+
     return(result)
 }
 
@@ -914,7 +929,7 @@ trainModelEval_Qf <- function(gageForModel_combined, nInnerFolds, nOuterFolds, n
 #'
 #' Train ml model on all data to predict Q_flood from NHD
 #'
-#' @param gageForModel_combined gage dataframe for model training
+#' @param gageForModel_combined gauge dataframe for model training
 #' @param nInnerFolds number inner layer folds for nested resampling cross-validation
 #'
 #' @return model for predicitng Q_flood
@@ -923,7 +938,7 @@ trainModelFin_Qf <- function(gageForModel_combined, nInnerFolds, numGrid){
     library(parsnip)
     library(bonsai)
 
-    #make sure all training sets comprise the same gages
+    #make sure all training sets comprise the same gauges
     data_fin <- gageForModel_combined %>%
         dplyr::mutate(Qexc_m3dy = log10(Qexc_m3dy)) %>%
         dplyr::select(!V_m3) %>%
@@ -934,18 +949,18 @@ trainModelFin_Qf <- function(gageForModel_combined, nInnerFolds, numGrid){
     #tune using nested resampling procedure
     set.seed(76)
 
-    #retrain workflow on all data (using 10 fold cv for hyperparameter tuning)
+    #retrain workflow on all data (using cv for hyperparameter tuning)
     folds <- vfold_cv(data_fin, repeats=1, v=nInnerFolds)
 
     #recipe
     recipe_full <- recipe(Qexc_m3dy ~ ., data=data_fin) %>%
         step_cut(StreamCalc, breaks=seq(1,max(data_fin$StreamCalc),1)) %>% #one hot encoding of stream order
         step_dummy(StreamCalc) %>%
-        step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1 (necessary for some models, can't hurt for others)
+        step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1
 
     #model
     lightgbmboost_model <- boost_tree(tree_depth=tune(), min_n=tune(), trees=tune(), learn_rate=0.1) %>% #https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html and a default learning rate of 0.1 (learning rate and ntrees are inverses of one another so only one should be tuned)
-        set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package kind of ad hoc for some reason
+        set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package ad hoc rather than tidymodels
         set_mode("regression")
 
     #workflow
@@ -977,7 +992,7 @@ trainModelFin_Qf <- function(gageForModel_combined, nInnerFolds, numGrid){
 #'
 #' Evaluate ml performance for predicitng Q_total
 #'
-#' @param gageForModel_combined gage dataframe for model training
+#' @param gageForModel_combined gauge dataframe for model training
 #' @param nInnerFolds number inner layer folds for nested resampling cross-validation
 #' @param nOuterFolds number outer layer folds for nested resampling cross-validation
 #' @param numGrid Hyperparameter search space grid search parameter for nested resampling cross-validation
@@ -989,7 +1004,7 @@ trainModelEval_Q <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
     library(parsnip)
     library(bonsai)
 
-    #make sure all training sets comprise the same gages
+    #make sure all training sets comprise the same gauges
     data_fin <- gageForModel_combined %>%
         dplyr::mutate(Q_m3dy = log10(Q_m3dy)) %>%
         dplyr::select(!V_m3) %>%
@@ -1012,11 +1027,11 @@ trainModelEval_Q <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
         recipe_full <- recipe(Q_m3dy ~ ., data=split_train) %>%
             step_cut(StreamCalc, breaks=seq(1,max(data_fin$StreamCalc),1)) %>% #one hot encoding of stream order
             step_dummy(StreamCalc) %>%
-            step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1 (necessary for some models, can't hurt for others)
+            step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1
 
         #model
         lightgbmboost_model <- boost_tree(tree_depth=tune(), min_n=tune(), trees=tune(), learn_rate=0.1) %>% #https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html and a default learning rate of 0.1 (learning rate and ntrees are inverses of one another so only one should be tuned)
-            set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package kind of ad hoc for some reason
+            set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package ad hoc rather than tidymodels
             set_mode("regression")
 
         #workflow
@@ -1028,22 +1043,24 @@ trainModelEval_Q <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
         set.seed(835)
         tuned_workflow <- tune_grid(workflow, resamples = folds_in, grid=numGrid, verbose=TRUE)
 
-        #evalualte hyperparameter tuning
+        #evaluate hyperparameter tuning
         bestModel <- tuned_workflow %>%
             select_best(metric='rsq')
 
         final_wf <- workflow %>%
             finalize_workflow(bestModel)
 
-        #fit the final, best model to the completely independent test dataset
+        #fit the final, best model (across all folds) and evaluate on the withheld test set
         fit_fin <- final_wf %>%    
-            last_fit(split) #fits model to entire training set (across all folds) and evaluates on the indepedent test set
+            last_fit(split)
 
         return(list('summary'=fit_fin,
             'model_fin'=extract_workflow(fit_fin)))
     }
 
+    #run aross folds
     result <- plyr::llply(folds_out$splits, nestedWrapper, .parallel=FALSE)
+
     return(result)
 }
 
@@ -1052,7 +1069,7 @@ trainModelEval_Q <- function(gageForModel_combined, nInnerFolds, nOuterFolds, nu
 #'
 #' Train ml model on all data to predict Q_total from NHD
 #'
-#' @param gageForModel_combined gage dataframe for model training
+#' @param gageForModel_combined gauge dataframe for model training
 #' @param nInnerFolds number inner layer folds for nested resampling cross-validation
 #'
 #' @return model for predicitng Q_total
@@ -1061,7 +1078,7 @@ trainModelFin_Q <- function(gageForModel_combined, nInnerFolds, numGrid){
     library(parsnip)
     library(bonsai)
 
-    #make sure all training sets comprise the same gages
+    #make sure all training sets comprise the same gauges
     data_fin <- gageForModel_combined %>%
         dplyr::mutate(Q_m3dy = log10(Q_m3dy)) %>%
         dplyr::select(!V_m3) %>%
@@ -1072,18 +1089,18 @@ trainModelFin_Q <- function(gageForModel_combined, nInnerFolds, numGrid){
     #tune using nested resampling procedure
     set.seed(76)
 
-    #retrain workflow on all data (using 10 fold cv for hyperparameter tuning)
+    #retrain workflow on all data (using cv for hyperparameter tuning)
     folds <- vfold_cv(data_fin, repeats=1, v=nInnerFolds)
 
     #recipe
     recipe_full <- recipe(Q_m3dy ~ ., data=data_fin) %>%
         step_cut(StreamCalc, breaks=seq(1,max(data_fin$StreamCalc),1)) %>% #one hot encoding of stream order
         step_dummy(StreamCalc) %>%
-        step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1 (necessary for some models, can't hurt for others)
+        step_normalize(all_numeric_predictors()) #normalize all features to mean 0, sd 1
 
     #model
     lightgbmboost_model <- boost_tree(tree_depth=tune(), min_n=tune(), trees=tune(), learn_rate=0.1) %>% #https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html and a default learning rate of 0.1 (learning rate and ntrees are inverses of one another so only one should be tuned)
-        set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package kind of ad hoc for some reason
+        set_engine('lightgbm', num_leaves=tune()) %>% #added to bonsai package ad hoc rather than tidymodels
         set_mode("regression")
 
     #workflow
@@ -1127,9 +1144,8 @@ predictBasin <- function(huc4, conusDF, model_Qf, model_V, model_Q){
         return(data.frame())
     }
 
-    #prep
+    #prep for models
     sf::sf_use_s2(FALSE)
-
     library(tidymodels)
 
     forPredict <- conusDF %>%
@@ -1140,16 +1156,17 @@ predictBasin <- function(huc4, conusDF, model_Qf, model_V, model_Q){
     forPredict <- forPredict %>%
         dplyr::select(!c('huc4', 'GageID', 'NHDPlusID', 'Wb_m', 'Hb_m', 'Qb_cms',))
 
-    #predict floodplain terms
+    #predict river-floodplain exchange terms
     forPredict$log10V_m3 <- predict(model_V, forPredict)$.pred
     forPredict$log10Qexc_m3dy <- predict(model_Qf, forPredict)$.pred
     forPredict$log10Q_m3dy <- predict(model_Q, forPredict)$.pred
-    forPredict$NHDPlusID <- nhdIDs
+    forPredict$NHDPlusID <- nhdIDs #add ids back to prediction df
 
     #wrangle dataframe
     forPredict_fin <- forPredict %>%
         dplyr::select(c('NHDPlusID','prob', 'log10V_m3', 'log10Qexc_m3dy', 'log10Q_m3dy'))
 
+    #additional calculations for residence time
     conusDF <- conusDF %>%
         dplyr::left_join(forPredict_fin, by=c('NHDPlusID', 'prob')) %>%
         dplyr::mutate(log10tau_hr = (log10V_m3 - log10Qexc_m3dy) + log10(24), #no channel or bankfull excess, just what's in the fp
@@ -1208,14 +1225,9 @@ summarizeBasin <- function(huc4, basinPredictions){
                     median_tau_hr_km = median(10^(log10tau_hr)/LengthKM, na.rm=T),
                     total_exchange_frac = sum(10^(log10Qexc_m3dy), na.rm=T)/sum(10^(log10Q_m3dy), na.rm=T)) %>%
         dplyr::mutate(huc4 = huc4) %>%
-        dplyr::mutate(total_exchange_frac = ifelse(total_exchange_frac > 1, 1, total_exchange_frac)) #a handful of basins are just above 1 because the numbers come from independent models, so we just round them off
+        dplyr::mutate(total_exchange_frac = ifelse(total_exchange_frac > 1, 1, total_exchange_frac)) #a handful of basins are slightly above 1 because the numbers come from independent models, so we just round them off
 
-    #diff between floods at-a-reach
-    out_diff <- out %>%
-        dplyr::summarize(perc_diff = max(median_tau_hr_km)-(min(median_tau_hr_km)))
-
-    return(list('out'=out,
-                'out_diff'=out_diff))
+    return(out)
 }
 
 
@@ -1245,6 +1257,7 @@ makeMapBasin <- function(basinPredictions, chosen_prob){
             ,TRUE ~ '1+'
         ))
 
+    #convert to factor
     basinPredictions$tau_col <- factor(basinPredictions$tau_col, levels = c('-0.5', '0', '0.5', '1', '1+'))
 
     return(basinPredictions)
@@ -1262,6 +1275,7 @@ assignVolVals <- function(vol_grids){
 
     huc4s <- terra::vect('data/path_to_data/CONUS_connectivity_data/HUC4s.shp')
 
+    #loop through usgs models and assign huc4 basin codes (for matchups)
     out <- data.frame()
     for(i in vol_grids){
         rast <- terra::rast(i)
@@ -1269,7 +1283,7 @@ assignVolVals <- function(vol_grids){
         unit_og <- terra::linearUnits(rast)
         rast <- terra::project(rast, terra::crs(huc4s)) #use the huc4 projection
 
-        ints <- terra::intersect(huc4s, terra::ext(rast))
+        ints <- terra::intersect(huc4s, terra::ext(rast)) #find regional basin that the usgs model is within
 
         temp <- as.data.frame(ints) %>%
             dplyr::select('huc4') %>%
@@ -1286,8 +1300,8 @@ assignVolVals <- function(vol_grids){
 #' collectValReaches
 #'
 #' Collect all modeled reaches to test hydrodynamic inundation simulations
-#' Using gages as proxy for USGS volume model mainstems b/c they are calibrated to these specific gages.
-#" This is a useful proxy for ensuring we only validate at reaches where the flood model actually passes through the entire catchment (bc they're gages are not on the edge of the model domains)
+#' Using gauges as proxy for USGS volume model mainstems b/c they are calibrated to these specific gauges on the mainstem
+#' This is a useful proxy for ensuring we only validate at reaches where the flood model actually passes through the entire catchment (bc their associatied gauges are not on the edge of the model domains but on the mainstems)
 #'
 #' @param huc4id basin ID code
 #'
@@ -1304,7 +1318,7 @@ collectValReaches <- function(huc4id){
                                     quiet = TRUE)
     network_gages <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusEROMQAMA', quiet=TRUE)
 
-    #join to gaged reaches
+    #join to gauged reaches
     unit_catchments <- unit_catchments %>%
         dplyr::left_join(network_gages, by='NHDPlusID') %>%
         dplyr::filter(is.na(GageID) == 0)
@@ -1315,8 +1329,8 @@ collectValReaches <- function(huc4id){
 
 #' wrangleDepthGrids
 #'
-#' Get actual volumes from hydrodynamic inundation simulations given an observed depth
-#' prep for Q_flood comparison to jacknife regression estimates
+#' Get estimated volumes from local USGS hydrodynamic inundation simulations given an observed depth
+#' Also, prep for Q_flood comparison to jacknife regression estimates
 #' 
 #' @param huc4id basin ID code
 #' @param reaches_val NHD reaches that may overlap with hydrodynamic inundation simulatios
@@ -1326,6 +1340,7 @@ collectValReaches <- function(huc4id){
 wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
     huc2 <- substr(huc4id,1, 2)
 
+    #grab model of interest
     volVal <- volVal %>%
         dplyr::filter(huc4 %in% huc4id)
 
@@ -1333,7 +1348,7 @@ wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
         return(data.frame())
     }
 
-    #get nhd
+    #get nhd hydrography for basin
     network_gages <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'), layer='NHDPlusEROMQAMA', quiet=TRUE) %>%
         dplyr::select(c('NHDPlusID', 'GageID'))
 
@@ -1342,7 +1357,7 @@ wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
         sf::st_zm() %>%
         dplyr::filter(NHDPlusID %in% reaches_val)
 
-    #load Indiana fixed basins
+    #load Indiana fixed basins (see manuscript)
     indiana <- readr::read_csv('data/indiana.csv')
     if(huc4id %in% indiana$huc4){
         network <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/indiana/indiana_fixed_',huc4id,'.shp'),quiet = TRUE) %>%
@@ -1358,6 +1373,7 @@ wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
         return(data.frame())
     }
     
+    #pull in the unit catchments used for reach-by-reach comparisons
     unit_catchments <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4id,'_HU4_GDB/NHDPLUS_H_',huc4id,'_HU4_GDB.gdb'),
                                     layer = 'NHDPlusCatchment',
                                     quiet = TRUE) %>%
@@ -1365,34 +1381,34 @@ wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
     
     unit_catchments_terra <- terra::vect(unit_catchments)
     
-    #get depth grids
+    #get depth grids from usgs models
     grids <- volVal$rast
     grid_names <- basename(volVal$rast)
     if(length(grids) == 0){
         return(data.frame())
     }
 
-    #make sure verything is in the same order for the merging of the extract
+    #make sure verything is listed in the same order for the merging of the extract
     network <- network[order(network$NHDPlusID),]
     unit_catchments <- unit_catchments[order(unit_catchments$NHDPlusID),]
     unit_catchments_terra <- unit_catchments_terra[order(unit_catchments_terra$NHDPlusID),]
 
-    #loop through and extract modeled volume
+    #loop through and extract modeled volumes from usgs models
     k <- 1
     out <- data.frame()
     for(i in grids){
         grid <- terra::rast(i)
-        grid <- terra::project(grid, "epsg:4269") #NAD1983 unprojected to match below # terra::project(grid, terra::crs(dem)) #to match the usgs dem we use in the model
+        grid <- terra::project(grid, "epsg:4269") #NAD1983 unprojected to match below
         name <- grid_names[k]
 
-        #get depth at flowline
+        #get depth at nhd flowline
         depths <- terra::extract(grid, unit_catchments_terra, fun=function(x){mean(x, na.rm=T)})
         flowline_depth_m <- depths[,2]*0.3048 #ft to m
 
         #get actual volume
         grid_d <- grid
         res <- terra::res(grid_d)[1]
-        grid_d <- terra::project(grid_d, "epsg:4269") #so we can sum up true cell size
+        grid_d <- terra::project(grid_d, "epsg:4269")
         grid_d <- grid_d * 0.3048 #ft to m
         grid_a <- terra::cellSize(grid_d, unit="m", transform=TRUE)
 
@@ -1400,10 +1416,12 @@ wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
         vols <- terra::extract(grid_v, unit_catchments_terra, fun=function(x){sum(x, na.rm=T)})
         vols <- vols[,2]
 
+        #prep output
         temp <- data.frame('grid'= substr(name, 1, nchar(name)-4),
                         'NHDPlusID'=network$NHDPlusID,
                         'GageID'=network$GageID,
                         'depth_m'=flowline_depth_m)
+
         temp <- temp %>%
             dplyr::mutate(V_usgs_m3 = vols) %>%
             dplyr::filter(depth_m > 0 & V_usgs_m3 > 0)
@@ -1419,6 +1437,7 @@ wrangleDepthGrids <- function(huc4id, reaches_val, volVal){
         return(data.frame())
     }
 
+    #final wrangle
     out$huc4 <- huc4id
     out <- out %>%
         dplyr::relocate(huc4)
@@ -1501,17 +1520,17 @@ modelsJacknifeBHG <- function(){
 
 #' prepBankfullHydraulics
 #'
-#' Computes bankfull hydraulic geometry for gage (to calculate Q_flood)
+#' Computes bankfull hydraulic geometry for gauge (to calculate Q_flood)
 #' 
 #' @param mode 'deploy' or 'val'
-#' @param gageRecord streamgage record dataframe
-#' @param gage streamgage metadata dataframe
+#' @param gageRecord streamgauge record dataframe
+#' @param gage streamgauge metadata dataframe
 #' @param BHGmodel_jacknife bankfull hydraulic models fit via jacknife regression (for val mode)
 #' @param BHGmodel bankfull hydraulic models fit (for deploy mode) 
 #' @param gageRecordStart starting date for streamflow records
 #' @param gageRecordEnd ending data for streamflow records 
 #'
-#' @return dataframe with bankfull hydraulics added to gage record
+#' @return dataframe with bankfull hydraulics added to gauge record
 prepBankfullHydraulics <- function(mode, gageRecord, gage, BHGmodel_jacknife, BHGmodel){
     if(nrow(gage %>% dplyr::bind_rows())==0){return(data.frame())}
     if(nrow(gageRecord %>% dplyr::bind_rows())==0){return(data.frame())}
@@ -1550,11 +1569,9 @@ prepBankfullHydraulics <- function(mode, gageRecord, gage, BHGmodel_jacknife, BH
         return('error! Please set mode to val or deploy')
     }
 
-    #fit models
+    #fit banfull hydraulics models
     gage$Qb_cms_log10 <- gage$a_Qb + gage$b_Qb*log10(gage$DA_skm)
-
     gage$Wb_m_log10 <- gage$a_Wb + gage$b_Wb*log10(gage$DA_skm)
-
     gage$Ab_m2_log10 <- gage$a_Ab + gage$b_Ab*log10(gage$DA_skm)
 
     #handle transform bias
@@ -1600,11 +1617,11 @@ prepBankfullHydraulics <- function(mode, gageRecord, gage, BHGmodel_jacknife, BH
 
 #' calc_Qexc
 #'
-#' Calculates Q_flood_event for floods in streamgage record
+#' Calculates Q_flood_event for floods in streamgauge record
 #' 
 #' @param mode 'deploy' or 'val'
-#' @param gageRecord streamgage record dataframe
-#' @param gagePrepped streamgage metadata dataframe
+#' @param gageRecord streamgauge record dataframe
+#' @param gagePrepped streamgauge metadata dataframe
 #' @param depAHG depth AHG model parameters 
 #' @param minAHGr2 minimum allowable r2 for depth AHG fit (if smaller than minAHGr2, remove)
 #'
@@ -1639,7 +1656,7 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG, minAHGr2){
         return(data.frame())
     }
 
-    #compute flow depth
+    #compute flow depth using AHG
     gageRecord <- gageRecord %>%
         dplyr::filter(Q_cms > 0) %>%
         dplyr::left_join(depAHG, by='site_no') %>%
@@ -1658,6 +1675,8 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG, minAHGr2){
         gageRecord$flood_OBS <- ifelse((gageRecord$Q_cms > probs$Qb_cms_OBS) & (gageRecord$Q_cms > (probs$Ub_ms_OBS*probs$Wb_m_OBS*gageRecord$Htf_m)), 'yes', 'no')
         gageRecord$flood_id <- NA
         gageRecord$flood_id_OBS <- NA
+
+        #loop through and assign flood ids to multi-day floods
         ticker <- 1
         ticker_OBS <- 1
         for(i in 1:nrow(gageRecord)){
@@ -1679,6 +1698,7 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG, minAHGr2){
 
         years <- max(lubridate::year(gageRecord$dateTime))-min(lubridate::year(gageRecord$dateTime))
 
+        #calculate metrics for each identified flood (using modeled Qb)
         events <- gageRecord %>%
             dplyr::filter(flood_id > 0) %>%
             dplyr::mutate(Ub_ms = probs[1,]$Ub_ms,
@@ -1695,6 +1715,7 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG, minAHGr2){
             return(data.frame())
         }
 
+        #calculate metrics for each identified flood (using observed Qb)
         events_obs <- gageRecord %>%
             dplyr::filter(flood_id_OBS > 0) %>%
             dplyr::mutate(Ub_ms = probs[1,]$Ub_ms_OBS,
@@ -1723,8 +1744,9 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG, minAHGr2){
     else if(mode == 'deploy'){
         gageRecord$flood <- ifelse((gageRecord$Q_cms > probs$Qb_cms) & (gageRecord$Q_cms > (probs$Ub_ms*probs$Wb_m*gageRecord$Htf_m)), 'yes', 'no')
         gageRecord$flood_id <- NA
-        ticker <- 1
 
+        #loop through and assign flood ids to multi-day floods
+        ticker <- 1
         for(i in 1:nrow(gageRecord)){
             if(gageRecord[i,]$flood == 'yes') {
                 gageRecord[i,]$flood_id <- ticker
@@ -1737,6 +1759,7 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG, minAHGr2){
 
         years <- max(lubridate::year(gageRecord$dateTime))-min(lubridate::year(gageRecord$dateTime))
 
+        #calculate metrics for each identified flood (using modeled Qb)
         events <- gageRecord %>%
             dplyr::filter(flood_id > 0) %>%
             dplyr::mutate(Ub_ms = probs[1,]$Ub_ms,
@@ -1769,17 +1792,17 @@ calc_Qexc <- function(mode, gageRecord, gagePrepped, depAHG, minAHGr2){
 
 #' prepGage
 #'
-#' Get streamgage metadata
+#' Get streamgauge metadata
 #' 
-#' @param gageID streamgage ID code
+#' @param gageID streamgauge ID code
 #'
-#' @return dataframe gage metadata
+#' @return dataframe gauge metadata
 prepGage <- function(gageID){
     if(is.na(gageID)){
         return(data.frame())
     }
 
-    #grab gage metadata
+    #grab gauge metadata
     site <- dataRetrieval::readNWISsite(siteNumbers = gageID) %>%
         dplyr::mutate(lat = dec_lat_va,
                     lon = dec_long_va,
@@ -1794,9 +1817,10 @@ prepGage <- function(gageID){
                         error = function(m){return(data.frame())})
     if(nrow(site_shp)==0) {return(data.frame())} #if no gage data, move on
 
-    shp_temp <- sf::st_join(site_shp, regions) #take the physiographic region that the basin is mostly in (dominant spatial intersection)
+    shp_temp <- sf::st_join(site_shp, regions) #take the physiographic region that the basin is primarily in (dominant spatial intersection)
     site_shp$physio_region <- shp_temp$DIVISION
 
+    #convert to df
     site <- site_shp %>%
         dplyr::mutate(lon = sf::st_coordinates(.)[,1],
                     lat = sf::st_coordinates(.)[,2]) %>%
@@ -1808,14 +1832,14 @@ prepGage <- function(gageID){
 
 #' prepFlowRecord
 #'
-#' Build gage flow record
+#' Build gauge flow record
 #' 
-#' @param gage dataframe of gage metadata
-#' @param gageRecordStart Start of time period for gage record
-#' @param gageRecordEnd End of time period for gage record
+#' @param gage dataframe of gauge metadata
+#' @param gageRecordStart Start of time period for gauge record
+#' @param gageRecordEnd End of time period for gauge record
 #' @param minRecordLength minimum length of years
 #'
-#' @return streamgage flow record dataframe
+#' @return streamgauge flow record dataframe
 prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength){
     set.seed(435)
 
@@ -1847,17 +1871,6 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
     # convert to date (workaround to handle known date class bug with midnight- https://github.com/tidyverse/lubridate/issues/1124)
     gagedata$date <- lubridate::ymd_hms(format(as.POSIXct(gagedata$dateTime), format = "%Y-%m-%d %T %Z"))
     gagedata$year <- lubridate::year(gagedata$date)
-    ###########DO NOT NEED ANYMORE########################
-    #get max annual floods for calculating the FEMA 100yr AEP
-    # gagedata_aep <- gagedata %>%
-    #     dplyr::mutate(year = lubridate::year(date)) %>%
-    #     dplyr::group_by(year) %>%
-    #     dplyr::summarise(site_no = dplyr::first(site_no), #pass through the group by
-    #                 Q_cms = max(Q_cms, na.rm=T))
-
-    # gagedata_aep$rank <- rank(-gagedata_aep$Q_cms) #annual flood data
-    # gagedata_aep$exceed_prob <- (gagedata_aep$rank/(nrow(gagedata_aep) + 1))
-    #######################################################
 
     #get number of years on record
     start <- min(gagedata$year)
@@ -1873,23 +1886,8 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
     gagedata$rank <- rank(-gagedata$Q_cms)
     gagedata$exceed_prob <- (gagedata$rank/(nrow(gagedata) + 1)) #exceed prob for a given day over 'spread' years
 
-    #grab rating table to convert to stage
-    #source('src/utils.R') and readNWISrating_CRAIG() when dataRetrieval had a bug in it. No longer necessary
-    # ratingTable <- tryCatch(dataRetrieval::readNWISrating(gageID, type='exsa'),
-    #                     error = function(m){return(data.frame())})
-    # ratingTable$stage_m <- (ratingTable$INDEP  + ratingTable$SHIFT) * 0.3048 #ft to m
-    # ratingTable$Q_cms <- ratingTable$DEP * 0.0283
-
-    # #convert historical streamflow record to stages using rating table
-    # gagedata$stage_m <- sapply(gagedata$Q_cms, function(i){ratingTable[which.min(abs(ratingTable$Q_cms - i)),]$stage_m})
-
-    # if(is.list(gagedata$stage_m)){return(data.frame())} #sometimes you get an empty list b/c the rating table is empty
-
-    # #add flag if gagedata is outside of the rating table
-    # gagedata$ratingflag <- ifelse(gagedata$Q_cms > max(ratingTable$Q_cms) | gagedata$Q_cms < min(ratingTable$Q_cms), 1, 0)
-
     gagedata <- gagedata %>%
-        dplyr::filter(spread >= minRecordLength & date >= gageRecordStart & date <= gageRecordEnd) #just to make sure previous filtering worked
+        dplyr::filter(spread >= minRecordLength & date >= gageRecordStart & date <= gageRecordEnd) #ensure previous filtering worked
 
     if(nrow(gagedata)== 0){return(data.frame())}
 
@@ -1900,12 +1898,12 @@ prepFlowRecord <- function(gage, gageRecordStart, gageRecordEnd, minRecordLength
 #' prepInundationData
 #'
 #' Prep for DEM inundation
-#' compute hand rasters
-#' runs for a single model reach (reachID)
+#' Compute HAND rasters
+#' Run for a single model reach (reachID), used within the indunation wrapper function
 #' 
 #' @param huc4 basin ID code
 #' @param reachID Model reach ID
-#' @param bankfullWidth reach bankfull width DON'T THINK ACTUALLY USED
+#' @param bankfullWidth reach bankfull width
 #' @param dem dem raster
 #' @param d8 flow direction raster
 #'
@@ -1914,10 +1912,11 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
     #prep
     huc2 <- substr(huc4, 1, 2)
 
+    #read in nhd unit catchment
     sql <- paste0('SELECT * FROM NHDPlusCatchment WHERE NHDPlusID = ', reachID)
     unit_catchment <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
                                         layer = 'NHDPlusCatchment',
-                                        query = sql, #sql query for efficient loading of just our desired catchment
+                                        query = sql, #sql query for efficient loading of desired catchment
                                         quiet = TRUE)
 
     unit_catchment <- terra::vect(unit_catchment)
@@ -1927,7 +1926,7 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
     sql <- paste0('SELECT * FROM NHDFlowline WHERE NHDPlusID = ', reachID)
     flowline <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'),
                                     layer = 'NHDFlowline',
-                                    query = sql, #sql query for efficient loading of just our desired catchment
+                                    query = sql, #sql query for efficient loading of desired catchment
                                     quiet = TRUE) %>%
         dplyr::filter(NHDPlusID == reachID) %>%
         sf::st_transform(crs=sf::st_crs(terra::crs(dem))) %>%
@@ -1982,10 +1981,10 @@ prepInundationData <- function(huc4, reachID, bankfullWidth, dem, d8){
                 'flag'='no pour points'))
     }
 
-    #do pour points sequentially, moving downstream
+    #do pour points sequentially, moving downstream and computing HAND
     for(i in 1:nrow(pixel_pour_points)){
         pixel_pour_point <- terra::vect(pixel_pour_points[i,], c('x','y'))
-        pixel_watershed <- terra::watershed(x=d8_clipped, pourpoint=cbind(pixel_pour_points[i,]$x, pixel_pour_points[i,]$y)) #can't pass a spatVector in dev version... needs to be list of point coords
+        pixel_watershed <- terra::watershed(x=d8_clipped, pourpoint=cbind(pixel_pour_points[i,]$x, pixel_pour_points[i,]$y))
         pixel_watershed[pixel_watershed == 0] <- NA
         pixel_dem <- terra::mask(dem_clipped, pixel_watershed)
 
@@ -2039,7 +2038,7 @@ modelInundation <- function(inundationData, floodDepth){
     floodMap[floodMap < 0] <- 0
     floodMap[floodMap > 0] <- 1
 
-    floodDepths[floodDepths < 0] <- 0 # if depth is negative (artifact of models and hand), just set it to 0
+    floodDepths[floodDepths < 0] <- 0 # if depth is negative (rare artifact of models and HAND), just set it to 0
 
     return(list('binary'=floodMap,
                 'depths'=floodDepths))
@@ -2048,10 +2047,10 @@ modelInundation <- function(inundationData, floodDepth){
 
 #' buildDepthAHG
 #'
-#' Fits a depth AHG curve and estimates flpow depth for flood events
+#' Fit a depth AHG curve and estimate flow depth for flood events
 #' 
-#' @param gage streamgage metadata dataframe
-#' @param minADCPMeas minimum allowed field measurements to fit depth AHG (if smaller, skip gage)
+#' @param gage streamgauge metadata dataframe
+#' @param minADCPMeas minimum allowed field measurements to fit depth AHG (if smaller, skip gauge)
 #'
 #' @return depth AHG parameters and fit statistics
 buildDepthAHG <- function(gage, minADCPMeas){
@@ -2060,7 +2059,7 @@ buildDepthAHG <- function(gage, minADCPMeas){
     #prep
     gageID <- gage$site_no
 
-    #prep custom rating table from available in situ flow measurements (usually though not always adcp)
+    #read in situ depth~flow measurements
     surfaceData <- tryCatch(dataRetrieval::readNWISmeas(gageID, expanded = TRUE),
                                     error=function(m){return(data.frame('site_no'=gageID,
                                                         'lm_r2'=NA,
@@ -2072,6 +2071,7 @@ buildDepthAHG <- function(gage, minADCPMeas){
                                                         'lm_depth_a'=NA,
                                                         'lm_depth_b'=NA))}
 
+    #wrangle depth~flow paired in situ measurements
     surfaceData <- surfaceData %>%
         dplyr::filter(measured_rating_diff %in% c('Fair','Good', 'Excellent')) %>% #Fair are < 8% flow diff, Good are < 5% flow diff, and Excellent are <2% flow diff
         dplyr::mutate('Q_cms'=chan_discharge* 0.0283, #imperial to metric
@@ -2082,7 +2082,7 @@ buildDepthAHG <- function(gage, minADCPMeas){
         dplyr::mutate(depth_m=area_m2 / width_m) %>%
         dplyr::filter(depth_m > 0 & Q_cms > 0 & is.finite(depth_m) & is.finite(Q_cms))
 
-    #remove likely erronous outlier depth measurements
+    #remove likely erronous outlier depth measurements that can overlay sway rating curve estimates
     iqr <- IQR(surfaceData$depth_m, na.rm=T)
 
     surfaceData <- surfaceData %>%
@@ -2115,7 +2115,7 @@ buildDepthAHG <- function(gage, minADCPMeas){
 
 #' modelsBHG
 #'
-#' Fits bakfull hydraulics models using Bieger et al. (2015) data
+#' Fit bakfull hydraulics models using Bieger et al. (2015) data
 #'
 #' @return list of models
 modelsBHG <- function(){
@@ -2163,7 +2163,7 @@ modelsBHG <- function(){
     models[models$division == "INTERMONTANE PLATEAU",]$division <- "INTERMONTANE PLATEAUS" #make sure names line up
 
     #we found that the WB_m model for the Interior Highlands, i.e. mountainious region in Arkansas, Missouri, Oklahoma, and Ilinois, had really poor fit (r2: 0.27)
-    #and a crazy high model intercept. Likely due to extremely small sample size (7 sites). So, we swap that model for the region that is most similar, the Appalachian Highlands.
+    #and a very high model intercept. Likely due to extremely small sample size (7 sites). So, we swap that model for the region that is most similar, the Appalachian Highlands.
     models[models$division == 'INTERIOR HIGHLANDS',]$a_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$a_Wb
     models[models$division == 'INTERIOR HIGHLANDS',]$b_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$b_Wb
     models[models$division == 'INTERIOR HIGHLANDS',]$r2_Wb <- models[models$division == 'APPALACHIAN HIGHLANDS',]$r2_Wb
@@ -2188,7 +2188,7 @@ modelsBHG <- function(){
 
 #' dataBHG
 #'
-#' Wrangles Bieger et al. (2015) data
+#' Wrangle Bieger et al. (2015) data
 #'
 #' @return cleaned dataset as dataframe
 dataBHG <- function(){
@@ -2209,12 +2209,13 @@ dataBHG <- function(){
 
 #' assignRegion
 #'
-#' Assign physiographic region to huc4 basin. Uses the most overlapping region for a given huc4
+#' Assign physiographic region to huc4 basin. Use the most overlapping region for a given huc4
 #'
 #' @return dataframe lookup table
 assignRegion <- function(){
     library(sf)
 
+    #loop through huc2 basins, running spatial join for each subset of huc4 basins
     basin <- data.frame()
     for(i in c('01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18')){
         basin_temp <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', i, '/WBD_', i, '_HU2_Shape/Shape/WBDHU4.shp'))
@@ -2223,7 +2224,7 @@ assignRegion <- function(){
         sf::sf_use_s2(FALSE)
         regions <- sf::st_read('data/physio.shp')
         regions <- fixGeometries(regions)
-        shp_temp <- sf::st_join(basin_temp, regions, largest=TRUE) #take the physiographic region that the basin is mostly in (dominant spatial intersection)
+        shp_temp <- sf::st_join(basin_temp, regions, largest=TRUE) #take the physiographic region that the basin is primarily (dominant spatial intersection)
 
         temp <- shp_temp %>%
             sf::st_drop_geometry() %>%
@@ -2232,6 +2233,7 @@ assignRegion <- function(){
         basin <- rbind(basin, temp)
     }
 
+    #only keep the 205 huc4 basins used in this study
     hucs <- c('0101', '0102', '0103', '0104', '0105', '0106', '0107', '0108', '0109', '0110',
         '0202', '0203', '0204', '0205', '0206', '0207', '0208',
         '0301', '0302', '0303', '0304', '0305', '0306', '0307', '0308', '0309', '0310', '0311', '0312', '0313', '0314', '0315', '0316', '0317', '0318',
@@ -2260,7 +2262,7 @@ assignRegion <- function(){
 
 #' findRegulatedReaches
 #'
-#' Finds regulated river reaches in huc4 basin, i.e. reaches immediately downstream of a dammed reach
+#' Find regulated river reaches in huc4 basin, i.e. reaches immediately downstream of a dammed reach
 #'
 #' @param huc4 basin code
 #' @param basinPredictions sf dataframe of model predictions for huc4 basin
@@ -2274,13 +2276,16 @@ findRegulatedReaches <- function(huc4, basinPredictions, perc_thresh, buffer_dis
 
     if(nrow(basinPredictions) == 0){return(data.frame())}
 
+    #load network topology df for huc4 basin
     network_VAA <- sf::st_read(paste0('data/path_to_data/CONUS_ephemeral_data/HUC2_', huc2, '/NHDPLUS_H_',huc4,'_HU4_GDB/NHDPLUS_H_',huc4,'_HU4_GDB.gdb'), layer='NHDPlusFlowlineVAA', quiet=TRUE) %>%
         dplyr::select(c('NHDPlusID', 'FromNode', 'ToNode'))
 
+    #load global dam watch database and filter for US
     gdw <- sf::st_read('data/path_to_data/CONUS_connectivity_data/GDW_barriers_v1_0.shp') %>%
         dplyr::filter(COUNTRY == 'United States') %>%
         sf::st_transform(crs=sf::st_crs(basinPredictions))
 
+    #sptially join dams to modeled reaches using quality control hyperparameters in _targets.R
     dammed_reaches <- sf::st_join(basinPredictions, gdw, join = sf::st_is_within_distance, dist = buffer_dist)
     dammed_reaches <- dammed_reaches %>%
         dplyr::mutate(diff = abs(CATCH_SKM - TotDASqKm)/TotDASqKm) %>%
@@ -2296,7 +2301,7 @@ findRegulatedReaches <- function(huc4, basinPredictions, perc_thresh, buffer_dis
     
     other_reaches <- basinPredictions %>%
         dplyr::filter(!(NHDPlusID %in% c(regulated_reaches$NHDPlusID))) %>%
-        dplyr::filter(!(NHDPlusID %in% c(dammed_reaches$NHDPlusID)))
+        dplyr::filter(!(NHDPlusID %in% c(dammed_reaches$NHDPlusID))) #filter for reaches that are (1) undammed and (2) not immedately downstream of a dammed reach
 
     return(list('other_reaches'=other_reaches,
                 'regulated_reaches'=regulated_reaches))
@@ -2305,7 +2310,7 @@ findRegulatedReaches <- function(huc4, basinPredictions, perc_thresh, buffer_dis
 
 #' writeToFile
 #'
-#' Writes model results to file for export
+#' Write model results to file for export
 #'
 #' @param huc4 basin code
 #' @param basinPredictions sf dataframe of model predictions for huc4 basin
@@ -2315,6 +2320,7 @@ writeToFile <- function(huc4, basinPredictions){
     if(nrow(basinPredictions)==0){
         return('empty df')
     }
+
     out <- basinPredictions %>%
         sf::st_drop_geometry() %>%
         dplyr::select(c('huc4', 'NHDPlusID', 'prob','LengthKM','log10tau_hr','log10Qexc_m3dy'))
